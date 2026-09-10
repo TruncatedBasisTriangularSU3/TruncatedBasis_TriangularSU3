@@ -9,17 +9,18 @@ from tqdm import tqdm
 from scipy.optimize import fsolve
 
 from importlib import reload
-import SU3_1hole_triangular
-import SU3_2hole_triangular
-import SU3_1hole_triangular2
+
+from TriangularSU3 import SU3_1hole_triangular
+from TriangularSU3 import SU3_2hole_triangular
+from TriangularSU3 import SU3_1hole_triangular2
 reload(SU3_2hole_triangular) 
 reload(SU3_1hole_triangular2) 
 reload(SU3_1hole_triangular)   
-from SU3_1hole_triangular import StringBasis
+from TriangularSU3.SU3_1hole_triangular import StringBasis
 
-import SU3_helper_sc_cc_overlaps
+from TriangularSU3 import SU3_helper_sc_cc_overlaps
 reload(SU3_helper_sc_cc_overlaps)  
-from SU3_helper_sc_cc_overlaps  import *
+from TriangularSU3.SU3_helper_sc_cc_overlaps import *
 
 
 calc_overlaps = False

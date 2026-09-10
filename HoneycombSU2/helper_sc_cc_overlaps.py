@@ -2,9 +2,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os.path
-from HC_1_hole import StringBasisHC as basis_sc
-from HC_2_holes import sorted_list
-from HC_2_holes import StringBasis as basis_cc
+
+from .HC_1_hole import StringBasisHC as basis_sc
+from .HC_2_holes import sorted_list
+from .HC_2_holes import StringBasis as basis_cc
 
 def plot_lat(state, ax=None, end=False, fig=None, axs=None):
     if isinstance(state, dict):

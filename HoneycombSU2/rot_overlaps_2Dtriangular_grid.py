@@ -4,12 +4,12 @@ from scipy.linalg import eigh
 from scipy.sparse import csr_matrix
 
 from importlib import reload
-from HC_1_hole import StringBasisHC as basis_hc_1h
-from HC_2_holes import StringBasis as basis_hc_2h
-import helper_sc_cc_overlaps
-reload(helper_sc_cc_overlaps)
-from helper_sc_cc_overlaps import make_triangular_grid_bz
 
+from HoneycombSU2.HC_1_hole import StringBasisHC as basis_hc_1h
+from HoneycombSU2.HC_2_holes import StringBasis as basis_hc_2h
+from HoneycombSU2 import helper_sc_cc_overlaps
+reload(helper_sc_cc_overlaps)
+from HoneycombSU2.helper_sc_cc_overlaps import make_triangular_grid_bz
 
 #set system parameters
 l_sc = 4

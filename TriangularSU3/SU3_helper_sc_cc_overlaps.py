@@ -8,17 +8,19 @@ import copy
 import cmath
 from scipy.spatial import cKDTree
 from importlib import reload
-import SU3_2hole_triangular
-reload(SU3_2hole_triangular)  
-from SU3_2hole_triangular import StringBasis as Lat_cc
-from SU3_2hole_triangular import sorted_list
 
-import SU3_1hole_triangular
+from . import SU3_2hole_triangular
+reload(SU3_2hole_triangular)  
+from .SU3_2hole_triangular import StringBasis as Lat_cc
+from .SU3_2hole_triangular import sorted_list
+
+from . import SU3_1hole_triangular
 reload(SU3_1hole_triangular)  
-from SU3_1hole_triangular import StringBasis as Lat_sc1
-import SU3_1hole_triangular2
+from .SU3_1hole_triangular import StringBasis as Lat_sc1
+
+from . import SU3_1hole_triangular2
 reload(SU3_1hole_triangular2)  
-from SU3_1hole_triangular2 import StringBasis as Lat_sc2
+from .SU3_1hole_triangular2 import StringBasis as Lat_sc2
 
 def index2momentum(i, Lx, Ly=0, size=np.pi):    #used #returns momentum grid of size L, what is i?
     if Ly==0:

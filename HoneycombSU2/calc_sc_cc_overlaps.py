@@ -4,10 +4,10 @@ import time
 from tqdm import tqdm
 from scipy.sparse.linalg import eigsh
 
-from HC_1_hole import StringBasisHC as basis_sc
-from HC_2_holes import StringBasis as basis_cc
-from HC_2_holes import sorted_list
-from helper_sc_cc_overlaps import *
+from HoneycombSU2.HC_1_hole import StringBasisHC as basis_sc
+from HoneycombSU2.HC_2_holes import StringBasis as basis_cc
+from HoneycombSU2.HC_2_holes import sorted_list
+from HoneycombSU2.helper_sc_cc_overlaps import *
 
 print("----------------- Setting up bases and system parameters -----------------")
 # define truncated bases for single and two hole channels, single hole: two basis for two sublattices

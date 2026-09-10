@@ -10,21 +10,19 @@ import matplotlib as mpl
 import os
 from tqdm import tqdm
 
-
-
-import SU3_1hole_triangular
-import SU3_2hole_triangular
-import SU3_1hole_triangular2
+from TriangularSU3 import SU3_1hole_triangular
+from TriangularSU3 import SU3_2hole_triangular
+from TriangularSU3 import SU3_1hole_triangular2
 reload(SU3_2hole_triangular) 
 reload(SU3_1hole_triangular2) 
 reload(SU3_1hole_triangular)   
-from SU3_1hole_triangular import StringBasis as Lat_sc1
-from SU3_1hole_triangular2 import StringBasis as Lat_sc2
-from SU3_2hole_triangular import StringBasis as Lat_cc 
+from TriangularSU3.SU3_1hole_triangular import StringBasis as Lat_sc1
+from TriangularSU3.SU3_1hole_triangular2 import StringBasis as Lat_sc2
+from TriangularSU3.SU3_2hole_triangular import StringBasis as Lat_cc 
 
-import SU3_helper_sc_cc_overlaps
+from TriangularSU3 import SU3_helper_sc_cc_overlaps
 reload(SU3_helper_sc_cc_overlaps)  
-from SU3_helper_sc_cc_overlaps  import *
+from TriangularSU3.SU3_helper_sc_cc_overlaps import *
 
 "decide if you want to calculate honeycomb or triangular lattice overlaps and other relevant parameters here:"
 honeycomb = True

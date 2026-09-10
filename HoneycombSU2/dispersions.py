@@ -3,8 +3,8 @@ from scipy.sparse.linalg import eigsh
 from scipy.linalg import eigh
 from scipy.sparse import csr_matrix
 
-from HC_1_hole import StringBasisHC as basis_hc_1h
-from HC_2_holes import StringBasis as basis_hc_2h
+from HoneycombSU2.HC_1_hole import StringBasisHC as basis_hc_1h
+from HoneycombSU2.HC_2_holes import StringBasis as basis_hc_2h
 
 
 #set system parameters

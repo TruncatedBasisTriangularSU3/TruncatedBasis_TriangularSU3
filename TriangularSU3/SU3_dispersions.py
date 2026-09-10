@@ -2,14 +2,14 @@ import numpy as np
 from scipy.sparse.linalg import eigsh
 from scipy.linalg import eigh
 from scipy.sparse import csr_matrix
-
 from importlib import reload
-import SU3_1hole_triangular
-import SU3_2hole_triangular
+
+from TriangularSU3 import SU3_1hole_triangular
+from TriangularSU3 import SU3_2hole_triangular
 reload(SU3_1hole_triangular)
 reload(SU3_2hole_triangular)
-from SU3_1hole_triangular import StringBasis as basis_tri_1h
-from SU3_2hole_triangular import StringBasis as basis_tri_2h
+from TriangularSU3.SU3_1hole_triangular import StringBasis as basis_tri_1h
+from TriangularSU3.SU3_2hole_triangular import StringBasis as basis_tri_2h
 
 
 #set system parameters
