@@ -3,11 +3,11 @@ import matplotlib.pyplot as plt
 import sys
 
 #set system parameters
-l_sc = 9
-l_cc = 9
+l_sc = 6
+l_cc = 6
 
 t = 1
-t2 = 0.2
+t2 = 0
 j = 0.3
 j_perp = 0.3
 honeycomb = True

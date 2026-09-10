@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import sys
 
 #set system parameters
-l_sc = 8
+l_sc = 6
 initial_sl = 0
-l_cc = 8
+l_cc = 6
 
 t = 1
 j = 0.3

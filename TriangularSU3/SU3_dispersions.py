@@ -13,12 +13,12 @@ from SU3_2hole_triangular import StringBasis as basis_tri_2h
 
 
 #set system parameters
-l_sc = 9
-l_cc = 9
-n_bands = 5
+l_sc = 7
+l_cc = 7
+n_bands = 2
 
 t = 1
-t2 = 0.2
+t2 = 0
 J = 0.3
 unit_cell = 1
 honeycomb = True
