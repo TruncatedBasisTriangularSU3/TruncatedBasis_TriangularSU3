@@ -11,7 +11,7 @@ from HoneycombSU2.HC_2_holes import StringBasis as basis_hc_2h
 l_sc = 6
 initial_sl = 0
 l_cc = 6
-n_bands = 4
+n_bands = 1
 
 t = 1
 J = 0.3

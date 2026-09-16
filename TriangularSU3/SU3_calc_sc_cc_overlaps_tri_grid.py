@@ -28,9 +28,9 @@ from TriangularSU3.SU3_helper_sc_cc_overlaps import *
 honeycomb = True
 system = 'SU2Hc_tri_grid' if honeycomb else 'SU3Tri_tri_grid'
 connected = True
-unit_cell = 2
-depth_sc = 4
-depth_cc = 4
+unit_cell = 1
+depth_sc = 5
+depth_cc = 5
 l_max_sc_overlaps = 3
 L=101 # must be odd
 
@@ -123,6 +123,14 @@ if lat_sc1.basis.length >1:
         #fix phase
         n0 = find_l0_state_sc2(lat_sc2) 
         v2 = v2*np.exp(-1j*np.angle(v2[n0])) #changed v2[0] to v2[n0] to fix phase according to l0 state
+
+        # adding gauge phase
+        theta = 2 * np.pi / 3
+        R_C3 = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta),  np.cos(theta)]])
+        r_0 = -(1/2)*np.sqrt(3) * np.array([1, -np.sqrt(3)]) 
+        R_0 = 1/3*(np.eye(2) - R_C3) @ r_0
+        phi_gauge = R_0[0]*k1[0,x] + R_0[1]*k1[1,x]
+
         vs_sc_2.append(v2)
 else:
     vs_sc_1 = np.ones((Lx,Ly))
@@ -513,7 +521,8 @@ axs[0,0].set_aspect('equal')
 axs[0,1].set_aspect('equal')
 axs[1,0].set_aspect('equal')
 axs[1,1].set_aspect('equal')
-plt.savefig("../results/figures/M_tprime_"+str(system)+"_depth_sc="+str(depth_sc)+"_depth_cc="+str(depth_cc)+"_lmax_sc_overlaps="+str(l_max_sc_overlaps)+"L="+str(L)+"_jperp="+str(j_perp)+"_j="+str(j)+"_t="+str(t)+".pdf", bbox_inches='tight')
+plt.savefig(f"../results/figures/M_tprime_{system}_depth_sc={depth_sc}_depth_cc={depth_cc}_lmax_sc_overlaps={l_max_sc_overlaps}L={L}_jperp={j_perp}_j={j}_t={t}_uc={unit_cell}.pdf",
+    bbox_inches="tight")
 
 fig, axs = plt.subplots(2,2, figsize=(8,7))
 im1 = axs[0,0].tripcolor(triang, np.abs(Ms_j_0).ravel(), shading='gouraud', cmap='coolwarm')
@@ -537,5 +546,6 @@ axs[0,0].set_aspect('equal')
 axs[0,1].set_aspect('equal')
 axs[1,0].set_aspect('equal')
 axs[1,1].set_aspect('equal')
-plt.savefig("../results/figures/M_jperp_"+str(system)+"_depth_sc="+str(depth_sc)+"_depth_cc="+str(depth_cc)+"_lmax_sc_overlaps="+str(l_max_sc_overlaps)+"L="+str(L)+"_jperp="+str(j_perp)+"_j="+str(j)+"_t="+str(t)+".pdf", bbox_inches='tight')
+plt.savefig(f"../results/figures/M_jperp_{system}_depth_sc={depth_sc}_depth_cc={depth_cc}_lmax_sc_overlaps={l_max_sc_overlaps}L={L}_jperp={j_perp}_j={j}_t={t}_uc={unit_cell}.pdf",
+    bbox_inches="tight")
 print("Plotting complete.")

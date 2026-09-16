@@ -13,8 +13,8 @@ from TriangularSU3.SU3_2hole_triangular import StringBasis as basis_tri_2h
 
 
 #set system parameters
-l_sc = 7
-l_cc = 7
+l_sc = 5
+l_cc = 5
 n_bands = 2
 
 t = 1

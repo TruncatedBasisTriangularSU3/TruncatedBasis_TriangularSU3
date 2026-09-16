@@ -378,7 +378,8 @@ class StringBasisHC:
         #h2 = np.concatenate((data_t.conj(),
                                #data_j_diag,
                                #data_j_offdiag, np.conj(data_j_offdiag)), axis=0)
-        data = np.concatenate((data_t, data_t.conj(),
+
+        data = np.concatenate((data_t, np.conj(data_t),
                                data_j_diag,
                                data_j_offdiag, np.conj(data_j_offdiag)), axis=0)
         
@@ -419,7 +420,11 @@ class StringBasisHC:
 
     def eigenval(self, state=0):
     # computes smallest eigenvalue of H
-        Es, _ = eigsh(self.H,k=state+1,which='SA',tol=self.tol)
+        # ARPACK requires k < N - 1. Here k = state + 1, and N = self.basis.length.
+        if self.basis.length > state + 2:
+            Es, _ = eigsh(self.H, k=state+1, which='SA', tol=self.tol)
+        else:
+            Es, _ = eigh(self.H.toarray())
         return np.sort(Es)[state]
     
     def eigenvec(self, state=0, v0=False):

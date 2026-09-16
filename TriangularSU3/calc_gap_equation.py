@@ -23,7 +23,7 @@ reload(SU3_helper_sc_cc_overlaps)
 from TriangularSU3.SU3_helper_sc_cc_overlaps import *
 
 
-calc_overlaps = False
+calc_overlaps = True
 honeycomb = True
 system = 'SU2Hc' if honeycomb else 'SU3Tri'
 L=71
@@ -36,9 +36,9 @@ connected = True
 t2=0
 t2_overlaps = 0.1
 
-depth_sc = 5
-depth_cc = 5
-l_max_sc_overlaps = 3
+depth_sc = 7
+depth_cc = 7
+l_max_sc_overlaps = 4
 # k_cc = np.array([0,0])
 k_cc = 4*np.pi/(3*np.sqrt(3))*np.array([1, 0]) # K-point
 unit_cell = 1
@@ -593,7 +593,7 @@ if k_cc[0] == 0 and k_cc[1] == 0:
     plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
     plt.tight_layout()
 
-    plt.savefig(f'../results/figures/Delta_k/{system}_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 
     fig, axs = plt.subplots(3, 2, figsize=(15, 20))
     axs_flat = axs.flatten()
@@ -631,7 +631,7 @@ if k_cc[0] == 0 and k_cc[1] == 0:
     plt.tight_layout()
 
     # 4. Save and Show
-    plt.savefig(f'../results/figures/Delta_k/{system}_Min_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 
 else:
     Delta_k = delta1 * gamma0 + delta2 * gamma1
@@ -654,5 +654,5 @@ plt.suptitle(fr'$\Delta_k$ for $Q=K$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2
 plt.tight_layout()
 
 # 4. Save and Show
-plt.savefig(f'../results/figures/Delta_k/{system}_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+plt.savefig(f'../results/figures/Delta_k/{system}_kcc=K_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 print('------------- finished plotting -------------')

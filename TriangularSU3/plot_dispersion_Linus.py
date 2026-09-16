@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import sys
 
 #set system parameters
-l_sc = 6
-l_cc = 6
+l_sc = 5
+l_cc = 5
 
 t = 1
 t2 = 0

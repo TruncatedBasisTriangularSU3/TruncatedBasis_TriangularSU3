@@ -564,39 +564,31 @@ class StringBasis:
             jdiag_sum = np.count_nonzero(lat - lat_diag == 0)
             #print(f'state {i}: jdiag={jdiag_sum}')
             diag = (jx_sum + jy_sum + jdiag_sum)/2
+
+            # # remove contributions from links adjacent to one of the holes
+            for n in range(2):
+                xh = hole_pos[n]
+                for move in [[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,-1]]:
+                    xh2 = xh + np.array(move)
+                    if lat[xh2[0],xh2[1]] == lat[xh[0],xh[1]] and (xh2 != hole_pos[0]).any():   #second condlition avoids double counting if holes are adjacent
+                        diag -= 1/2 
             
-            # # remove contributions from links adjacent to one of the holes
-            # for n in range(2):
-            #     xh = hole_pos[n]
-            #     for move in [[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,-1]]:
-            #         xh2 = xh + np.array(move)
-            #         if lat[xh2[0],xh2[1]] == lat[xh[0],xh[1]] and (xh2 != hole_pos[0]).any():   #second condlition avoids double counting if holes are adjacent
-            #             diag -= 1/2 
+            self.data_j.append(diag)
+            self.row_j.append(i)
+            self.col_j.append(i)
 
 
-            # # remove contributions from links adjacent to one of the holes
+            ### Calculate physical distance for V (Density-Density)
             phys_dist = np.zeros(2)
             hole_dist = hole_pos[1] - hole_pos[0]
             phys_dist[0], phys_dist[1] = np.sqrt(3)/2*hole_dist[0], hole_dist[1] - 1/2*hole_dist[0]
             abs_dist = np.sqrt(np.sum(phys_dist**2))
 
             if np.isclose((abs_dist), 1, atol=1e-6): #if the holes sit on neighboring sites
-                if self.honeycomb:
-                    diag += 0.5 * 5
-                else:
-                    diag += 0.5 * 11
                 self.data_V.append(1)
                 self.row_V.append(i)
                 self.col_V.append(i)
-            else:
-                if self.honeycomb:
-                    diag += 0.5 * 6
-                else:
-                    diag += 0.5 * 12
-            
-            self.data_j.append(diag)
-            self.row_j.append(i)
-            self.col_j.append(i)
+
 
             ### compute H_{J_perp} part
             siteslist = (np.argwhere(lat0)).tolist()
@@ -731,10 +723,7 @@ class StringBasis:
             data_t = t * p ** data_1 * np.exp(1j * (data_2[:,0]*k[0]+data_2[:,1]*k[1]))
         else:
             data_t = []
-        # self.data_t_test = data_t
-        # self.data_t_test = np.concatenate((np.array(data_t), np.array(data_t).conj()))
-
-        # print('len data_t compute_H: ', len(data_t))
+        
 
         if bool(t2) and len(self.data_t2) > 0:
             data_1 = np.array([x[0] for x in self.data_t2])
@@ -758,13 +747,9 @@ class StringBasis:
             data_j_perp = []
             row_j_perp = []
             col_j_perp = []
-        # print('len data_j_perp compute_H: ', len(data_j_perp))
-        # print('len col_j_perp compute_H: ', len(col_j_perp))
-        # print('len row_j_perp compute_H: ', len(row_j_perp))
-        # print(f'lengh of V data: {len(self.data_V)}')
+        
         
         N = 1  # normalization factor for SU(3) t-J model
-        # if self.honeycomb == self.honeycomb:
         if self.honeycomb == False:
             data = np.concatenate((data_t, np.conj(data_t), data_t2, np.conj(data_t2), N*j * np.array(self.data_j), N * np.array(data_j_perp), V * np.array(self.data_V)), axis=0)
             row = np.array(self.row_t + self.col_t + row_t2 + col_t2 + self.row_j + row_j_perp + self.row_V)
@@ -775,12 +760,17 @@ class StringBasis:
             col = np.array(self.col_t + col_t2 + self.col_j + col_j_perp + self.col_V)
 
         self.data = data
-        # print(f"Length of data array: {len(data)}")
-        # print(f"Length of row array: {len(row)}") 
-        # print(f"Length of col array: {len(col)}")
 
         self.H = csr_matrix((data, (row,col)), shape=(len(self.representatives), len(self.representatives)), dtype=np.csingle)
         self.H.eliminate_zeros() # (only helpful if either t or j = 0)
+
+        # --- Hermiticity Check ---
+        diff = self.H - self.H.conj().T
+        # We check if there are non-zero elements and if their magnitude exceeds a small tolerance 
+        if diff.nnz > 0 and np.max(np.abs(diff.data)) > 1e-6:
+            max_diff = np.max(np.abs(diff.data))
+            raise ValueError(f"Hamiltonian self.H is not Hermitian! Maximum discrepancy: {max_diff}")
+        # -------------------------
 
     def eigenval(self, state=0):
     # computes smallest eigenvalue of H
@@ -957,7 +947,7 @@ class StringBasis:
                     E[i,l]=self.eigenval(state)
 
         else:
-            print(f'Computing 1D dispersion for state {state}')
+            # print(f'Computing 1D dispersion for state {state}')
             E=[] 
             Ev = []
             for i in range(k_array.shape[0]):
@@ -1105,79 +1095,6 @@ class StringBasis:
             mir_state = self.rot_state_120(mir_state) #this convention leaves the uc = plane invariant under mirror symmetry
 
         return mir_state
-    
-    # def build_mirror_matrix(self, k, plane=0, p=-1):
-    #     """
-    #     Builds the representation matrix M(k) for reflection symmetry in the representative basis.
-        
-    #     Parameters:
-    #       k     : 2D momentum array [k_x, k_y]
-    #       plane : 0 for sigma_y (y-axis reflection)
-    #               1 for sigma_1 (rotated by 120 deg)
-    #               2 for sigma_2 (rotated by 240 deg)
-    #       p     : exchange parity (-1 for fermions, +1 for bosons)
-    #     """
-    #     row = []
-    #     col = []
-    #     data = []
-
-    #     # 1. Momentum transformation matrix for plane 0 (sigma_y)
-    #     M_sigma_y = np.array([[-1.0,  0.0],
-    #                           [ 0.0,  1.0]])
-
-    #     # Clockwise C3 rotation matrix (-120 deg)
-    #     theta = -2.0 * np.pi / 3.0
-    #     C3 = np.array([[np.cos(theta), -np.sin(theta)],
-    #                    [np.sin(theta),  np.cos(theta)]])
-
-    #     # Full reflection matrix: sigma_plane = (C3)^plane @ sigma_y
-    #     M_plane = np.linalg.matrix_power(C3, plane % 3) @ M_sigma_y
-    #     k_mir = M_plane @ k
-    #     # k_mir = k
-    #     for n, state in enumerate(self.representatives):
-    #         x, y = self.find_hole_sublattice(state['seq'])
-            
-    #         # Apply mirror reflection across the chosen plane
-    #         mir_state = self.mirror_state(state, plane=plane)
-            
-    #         found, m = self.basis.search(self.state_2_list_entry(mir_state))
-    #         if found:
-    #             phase_mir = 0.0
-                
-    #             # Geometric sublattice phase for planes 1 and 2 (from C3 rotations)
-    #             if self.honeycomb:
-    #                 if x == 1:
-    #                     if plane == self.unit_cell:
-    #                         phase_mir = 0.0
-    #                     elif plane == 0 and self.unit_cell == 1:
-    #                         phase_mir = np.sqrt(3) * k_mir[0]
-    #                     elif plane == 0 and self.unit_cell == 2:
-    #                         phase_mir = -np.sqrt(3) * k_mir[0]
-    #                     elif plane == 1 and self.unit_cell == 0:
-    #                         phase_mir = 0.5 * (np.sqrt(3) * k_mir[0] + 3.0 * k_mir[1])
-    #                     elif plane == 1 and self.unit_cell == 2:
-    #                         phase_mir = -0.5 * (np.sqrt(3) * k_mir[0] + 3.0 * k_mir[1])
-    #                     elif plane == 2 and self.unit_cell == 0:
-    #                         phase_mir = 0.5 * (-np.sqrt(3) * k_mir[0] + 3.0 * k_mir[1])
-    #                     elif plane == 2 and self.unit_cell == 1:
-    #                         phase_mir = -0.5 * (-np.sqrt(3) * k_mir[0] + 3.0 * k_mir[1])
-
-    #             (rep, _, m3) = self.is_representative[m]
-    #             row.append(m3)
-    #             col.append(n)
-
-    #             if rep:
-    #                 data.append(np.exp(-1j * phase_mir))
-    #             else:
-    #                 # Particle exchange phase with single parity sign 'p'
-    #                 k_mirror = M_plane @ k
-    #                 b = self.dist_2_phys_dist(mir_state['hole_pos'][1] - mir_state['hole_pos'][0], mir_state['seq'])
-    #                 phase_exchange = b[0] * k_mirror[0] + b[1] * k_mirror[1]
-    #                 data.append(p * np.exp(-1j * (phase_mir + phase_exchange)))
-    #         else:
-    #             print(f"Could not find mirror state for representative {n}")
-
-    #     return csr_matrix((data, (row, col)), shape=(len(self.representatives), len(self.representatives)), dtype=complex)
 
     def build_mirror_matrix(self, k, plane=0, p=-1):
         """

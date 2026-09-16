@@ -36,8 +36,8 @@ xlabels = ['$\Gamma$', 'K', 'M', "K'", '$\Gamma$']
 
 #load 2D dispersions
 print("loading & plotting 2D dispersions ...")
-disp_sc = np.load(f"results/{system}/2D_dispersion_sc_depth={l_sc}_t={t}_j={j}_kmin={xlim[0]}_kmax={xlim[1]}_init_sl={initial_sl}.npy")
-disp_cc = np.load(f"results/{system}/2D_dispersion_cc_depth={l_sc}_t={t}_j={j}_kmin={xlim[0]}_kmax={xlim[1]}.npy")
+disp_sc = np.load(f"../results/{system}/2D_dispersion_sc_depth={l_sc}_t={t}_j={j}_kmin={xlim[0]}_kmax={xlim[1]}_init_sl={initial_sl}.npy")
+disp_cc = np.load(f"../results/{system}/2D_dispersion_cc_depth={l_sc}_t={t}_j={j}_kmin={xlim[0]}_kmax={xlim[1]}.npy")
 
 #plot dispersions
 fig, axs = plt.subplots(1,2, figsize=(15,5))
@@ -79,12 +79,12 @@ axs[1].annotate('K', (K[0], K[1]), size=15)
 axs[1].annotate("K'", (Kp[0], Kp[1]), size=15)
 axs[1].annotate('M', (M[0], M[1]), size=15)
 axs[1].set_title('cc', size=14)
-plt.savefig(f'results/figures/{system}_dispersions_full_BZ_sc_depth={l_sc}_cc_depth={l_cc}_t={t}_j={j}.pdf', bbox_inches='tight')
+plt.savefig(f'../results/figures/{system}_dispersions_full_BZ_sc_depth={l_sc}_cc_depth={l_cc}_t={t}_j={j}.pdf', bbox_inches='tight')
 
 #plot band structure
 print("loading & plotting 1D bandstructure ...")
-disp_sc = np.load(f"results/{system}/1D_dispersion_sc_path_GKMKpG_depth={l_sc}_t={t}_j={j}_init_sl={initial_sl}.npy")
-disp_cc = np.load(f"results/{system}/1D_dispersion_cc_path_GKMKpG_depth={l_cc}_t={t}_j={j}.npy")
+disp_sc = np.load(f"../results/{system}/1D_dispersion_sc_path_GKMKpG_depth={l_sc}_t={t}_j={j}_init_sl={initial_sl}.npy")
+disp_cc = np.load(f"../results/{system}/1D_dispersion_cc_path_GKMKpG_depth={l_cc}_t={t}_j={j}.npy")
 x1 = np.repeat(x1, disp_sc.shape[0]).reshape(x1.shape[0], disp_sc.shape[0])
 
 fig, axs = plt.subplots(1,2,  figsize=(10,5))
@@ -96,7 +96,7 @@ axs[0].set_xticks(xticks, xlabels, size=16)
 axs[1].grid()
 axs[1].set_xticks(xticks, xlabels, size=16)
 
-plt.savefig(f'results/figures/{system}_1D_bandstructure_GKMKpG_sc_depth={l_sc}_cc_depth={l_cc}_t={t}_j={j}.pdf', bbox_inches='tight')
+plt.savefig(f'../results/figures/{system}_1D_bandstructure_GKMKpG_sc_depth={l_sc}_cc_depth={l_cc}_t={t}_j={j}.pdf', bbox_inches='tight')
 plt.show()
 
 print("----------- finished plotting -----------------")
