@@ -811,6 +811,26 @@ class StringBasis:
             
             return Es[state], vs[:,state]
         
+    def eigensys(self, state=0, full=False, v0=None):
+        if self.depth > 2:
+            if isinstance(v0, str) and v0 == 'superposition':
+                N_rep = len(self.representatives)
+                v0 = np.ones(N_rep, dtype=np.complex64) / np.sqrt(N_rep)
+            elif v0 is not None:
+                v0 = np.asarray(v0, dtype=np.complex64)
+            
+            Es, vs = eigsh(self.H, k=state+1, which='SA', tol=self.tol, v0=v0)
+        else:
+            Es, vs = eigh(self.H.toarray())
+        sort_ind = np.argsort(Es)
+        Es = Es[sort_ind]
+        vs = vs[:, sort_ind]
+        if full:
+            return Es, vs
+        else:
+            
+            return Es[state], vs[:,state]
+        
     def delete_weak_j_perp(self, t, j, j_perp, cutoff=1e-4):
         '''
         Looks for the j_perp processes with the most important contributions and delete the rest of them from self.data_j_perp
@@ -930,7 +950,7 @@ class StringBasis:
         self.row_j_perp = row
         self.col_j_perp = col
 
-    def dispersion(self,k_array,two_D=False, state=0, t=1, j=0.3, t2=0, j_perp=0.3, p=-1, V=0):
+    def dispersion(self,k_array,two_D=False, state=0, t=1, j=0.3, t2=0, j_perp=0.3, p=-1, V=0, v0=None):
         # returns array of energies corresponding to the moments in k_array
         # 2D == False: k_array = array of shape (Num_points,2)
         # 2D == True: k_array = Meshgrid(x,y)
@@ -944,7 +964,7 @@ class StringBasis:
             for i in range(k_x.shape[0]):
                 for l in range(k_x.shape[1]):
                     self.compute_H([k_x[i,l],k_y[i,l]], t=t, t2=t2, j=j, j_perp=j_perp, V=V, p=p) 
-                    E[i,l]=self.eigenval(state)
+                    E[i,l],_=self.eigensys(state, v0=v0)
 
         else:
             # print(f'Computing 1D dispersion for state {state}')
@@ -953,7 +973,7 @@ class StringBasis:
             for i in range(k_array.shape[0]):
                 k=k_array[i,:]
                 self.compute_H(k, t=t, t2=t2, j=j, j_perp=j_perp, p=p, V=V)
-                es, vs = self.eigensys(state)
+                es, vs = self.eigensys(state, v0=v0)
                 E.append(es)
                 Ev.append(vs)
         return np.array(E), np.array(Ev)
