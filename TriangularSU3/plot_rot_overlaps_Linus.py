@@ -3,13 +3,14 @@ import matplotlib.pyplot as plt
 import sys
 
 #set system parameters
-l_sc = 4
-l_cc = 4
+l_sc = 6
+l_cc = 6
 
 t = 1
 j = 0.3
+t2 = 0
 
-honeycomb = False
+honeycomb = True
 unit_cell = 1
 
 Code = 'TRI'
@@ -34,11 +35,11 @@ xlabels = ['$\\Gamma$', 'K', 'M', "K'", '$\\Gamma$']
 #load overlaps
 # path_data = "/Users/linushein/Documents/Python/TruncatedBasis_TriangularSU3/"
 path_data = "../"
-ops_sc = np.load(f"{path_data}results/{Code}/{system}_rot_overlaps_sc_depth={l_sc}_t={t}_j={j}_uc={unit_cell}.npy")
-ops_cc = np.load(f"{path_data}results/{Code}/{system}_rot_overlaps_cc_depth={l_cc}_t={t}_j={j}_uc={unit_cell}.npy")
+ops_sc = np.load(f"{path_data}results/{Code}/{system}_rot_overlaps_sc_depth={l_sc}_t={t}_t2={t2}_j={j}_uc={unit_cell}.npy")
+ops_cc = np.load(f"{path_data}results/{Code}/{system}_rot_overlaps_cc_depth={l_cc}_t={t}_t2={t2}_j={j}_uc={unit_cell}.npy")
 
-disp_sc = np.load(f"{path_data}results/{Code}/{system}_1D_dispersion_sc_path_GKMKpG_depth={l_sc}_t={t}_j={j}_uc={unit_cell}.npy")
-disp_cc = np.load(f"{path_data}results/{Code}/{system}_1D_dispersion_cc_path_GKMKpG_depth={l_cc}_t={t}_j={j}_uc={unit_cell}.npy")
+disp_sc = np.load(f"{path_data}results/{Code}/{system}_1D_dispersion_sc_path_GKMKpG_depth={l_sc}_t={t}_t2={t2}_j={j}_uc={unit_cell}.npy")
+disp_cc = np.load(f"{path_data}results/{Code}/{system}_1D_dispersion_cc_path_GKMKpG_depth={l_cc}_t={t}_t2={t2}_j={j}_uc={unit_cell}.npy")
 x1 = np.repeat(x1, disp_sc.shape[0])
 print(disp_sc.shape)
 print(disp_sc.shape[0])

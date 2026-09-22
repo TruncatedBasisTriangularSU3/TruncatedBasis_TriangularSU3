@@ -956,7 +956,7 @@ class StringBasis:
         # 2D == True: k_array = Meshgrid(x,y)
     
         if two_D:
-            print(f'Computing 2D dispersion for state {state}')
+            # print(f'Computing 2D dispersion for state {state}')
             Ev = []
             k_x=k_array[0]
             k_y=k_array[1]
@@ -1180,124 +1180,86 @@ class StringBasis:
 
         return csr_matrix((data, (row, col)), shape=(len(self.representatives), len(self.representatives)), dtype=complex)
 
-    def rot_trial_state(self, m3, k, p=-1): #p is parity under particle exchange
-        '''Computes unnormalized trial state with given rotational C3 eigenvalue m3 and momentum k'''
+    # def rot_trial_state(self, m3, k, p=-1): #p is parity under particle exchange
+    #     '''Computes unnormalized trial state with given rotational C3 eigenvalue m3 and momentum k'''
+    #     assert len(self.representatives) > 0
+    #     v = np.zeros((len(self.representatives)), dtype=complex)
+    #     lat = self.Neel_state[0]
+    #     hole_pos = [np.ones((2,), dtype=int) * (self.depth + 1) for _ in range(2)]
+    #     seq = []
+    #     state0 = {'lat': lat, 'hole_pos': hole_pos, 'seq': seq}
+    #     steps = [[1, 1, 0], [1, 0, 1], [1, -1, -1]] #hole 1 moves from sl 0 to 1
+    #     for n, step in enumerate(steps):
+    #         step = np.array(step, dtype=int)
+    #         state = copy.deepcopy(state0)
+    #         lat, hole_pos = self.make_step(state['lat'], state['hole_pos'], step)
+    #         seq = state['seq'] + [step]
+    #         state = {'lat': lat, 'hole_pos': hole_pos, 'seq': seq}
+
+    #         # search for this state in the basis of representatives
+    #         found,m=self.basis.search(self.state_2_list_entry(state))
+    #         rep, _, j = self.is_representative[m]
+    #         if found:
+    #             phase = 0
+    #             phase_t = 0
+    #             x,_ = self.find_hole_sublattice(state['seq'])
+    #             a = np.sqrt(3)
+    #             if self.big_unit_cell:
+    #                 # phase = self.f(x,y)*a
+    #                 phase_t = -self.g(x)*a
+    #             if not rep:
+    #                 a = self.dist_2_phys_dist(hole_pos[1] - self.depth - 1, seq)
+    #                 phase = -1 * (a[0]*k[0]+a[1]*k[1]) + (p<0) * np.pi + phase_t
+    #             v[j] += 1/np.sqrt(3) * np.exp(1j * m3 * n * 2*np.pi/3 + 1j*phase) 
+    #     return v
+
+    def rot_trial_state(self, m3, k, p=-1):
+        """
+        Computes an unnormalized trial state with given C3 rotational quantum 
+        number m3 in {0, 1, 2} and momentum k using the representation matrix 
+        R = build_rot_matrix(k, p).
+        """
         assert len(self.representatives) > 0
-        v = np.zeros((len(self.representatives)), dtype=complex)
+
+        # 1. Base reference state: single bond hop (hole 1 moves from sl 0 to 1)
         lat = self.Neel_state[0]
         hole_pos = [np.ones((2,), dtype=int) * (self.depth + 1) for _ in range(2)]
-        seq = []
-        state0 = {'lat': lat, 'hole_pos': hole_pos, 'seq': seq}
-        steps = [[1, 1, 0], [1, 0, 1], [1, -1, -1]] #hole 1 moves from sl 0 to 1
-        for n, step in enumerate(steps):
-            step = np.array(step, dtype=int)
-            state = copy.deepcopy(state0)
-            lat, hole_pos = self.make_step(state['lat'], state['hole_pos'], step)
-            seq = state['seq'] + [step]
-            state = {'lat': lat, 'hole_pos': hole_pos, 'seq': seq}
+        state0 = {'lat': lat, 'hole_pos': hole_pos, 'seq': []}
+        step0 = np.array([1, 1, 0], dtype=int)
 
-            # search for this state in the basis of representatives
-            found,m=self.basis.search(self.state_2_list_entry(state))
-            rep, _, j = self.is_representative[m]
-            if found:
-                phase = 0
-                phase_t = 0
-                x,_ = self.find_hole_sublattice(state['seq'])
-                a = np.sqrt(3)
-                if self.big_unit_cell:
-                    # phase = self.f(x,y)*a
-                    phase_t = -self.g(x)*a
-                if not rep:
-                    a = self.dist_2_phys_dist(hole_pos[1] - self.depth - 1, seq)
-                    phase = -1 * (a[0]*k[0]+a[1]*k[1]) + (p<0) * np.pi + phase_t
-                v[j] += 1/np.sqrt(3) * np.exp(1j * m3 * n * 2*np.pi/3 + 1j*phase) 
+        # Deep copy to prevent modifying the Neel state reference in place
+        state_base = copy.deepcopy(state0)
+        lat_base, hole_pos_base = self.make_step(state_base['lat'], state_base['hole_pos'], step0)
+        state_base['lat'] = lat_base
+        state_base['hole_pos'] = hole_pos_base
+        state_base['seq'] = [step0]
+
+        # Locate base state in representative basis
+        found, m = self.basis.search(self.state_2_list_entry(state_base))
+        assert found, "Base trial state not found in basis"
+        rep, _, j = self.is_representative[m]
+
+        v0 = np.zeros(len(self.representatives), dtype=complex)
+        if rep:
+            v0[j] = 1.0
+        else:
+            # Add exchange phase if base state is not representative
+            b = self.dist_2_phys_dist(state_base['hole_pos'][1] - state_base['hole_pos'][0], state_base['seq'])
+            phase_exchange = b[0] * k[0] + b[1] * k[1]
+            v0[j] = p * np.exp(-1j * phase_exchange)
+
+        # 2. Project onto C3 symmetry sector using R(k):
+        #    v = (1 / sqrt(3)) * sum_{n=0}^2 e^(i * 2pi/3 * m3 * n) * (R^n @ v0)
+        R = self.build_rot_matrix(k, p=p)
+        v = (1.0 / np.sqrt(3.0)) * v0
+        v_current = v0.copy()
+
+        for n in range(1, 3):
+            v_current = R @ v_current
+            v += (1.0 / np.sqrt(3.0)) * np.exp(1j * m3 * n * 2.0 * np.pi / 3.0) * v_current
+
         return v
 
-    def f(self, x, y):
-        return (-y)%3+(-x+1)%3+1
-    
-    def f_triangular(self, x, y):
-        return {(0,0):0, (1,1):0, (2,2):0,
-            (0,1):2, (0,2):1,
-            (1,2):-1, (1,0):-2,
-            (2,0):-1, (2,1):1}[(x, y)]
-
-    def f_honeycomb(self,x,y): 
-        return x-y
-    
-    def build_rot_matrix_old(self,k,p=-1): #change unit cell, st. green is in the middle
-        row = []
-        col = []
-        data = []
-        #k = 4*np.pi/(3*np.sqrt(3)) * np.array([1, 0]) * 0 #momentum k=0, why? because rotation should be momentum independent
-        #self.compute_H(k=k)
-
-        for n, state in enumerate(self.representatives):
-        # for n in [1]: 
-        #     state = self.representatives[n]
-            #print(f'state {n}: {state}')
-            x,y = self.find_hole_sublattice(state['seq'])
-            phase_t = 0
-            if not x == 0:
-                state1 = state.copy()
-                seq = state1['seq']
-                lat = state1['lat']
-                hole_pos = state1['hole_pos']
-                f = (-x+1)%3-1      #map: f(0)=0, f(1)=-1, f(2)=1
-                step = [0,f,0]
-                #print(f'step={step}')
-                lat1 = lat.copy()
-                hole_pos1 = hole_pos.copy()
-                lat, hole_pos = self.translation(lat1, hole_pos1, step)
-                #print(f'step={step}') 
-                state1['lat'] = lat
-                state1['hole_pos'] = hole_pos
-                state1['seq'] = seq + [step]
-                #print(f'state after translation {n}: {state1}')
-            else:
-                state1 = state
-            rot_state = self.rot_state_120(state1)        #perform 120degree rotation 
-            #print(f'rot_state {n} pre translation: {rot_state}')
-            if not x == 0:
-                #print(f'x={x}')
-                step_rot = np.array([step[0], step[1]-step[2],step[1]], dtype=int)
-                #print(f'step_rot={step_rot}')
-                rot_lat, rot_hole_pos = self.translation(lat, hole_pos, step_rot) 
-                rot_state['lat'] = rot_lat
-                rot_state['hole_pos'] = rot_hole_pos
-                rot_seq = rot_state['seq']
-                # print(f'seq pre pop:{rot_seq}')
-                rot_seq.pop()
-                # print(f'seq post pop:{rot_seq}')
-                #print(f'rot_state {n} after translation: {rot_state}')
-                dist = self.dist_2_phys_dist(step_rot[1:],seq)
-                phase_t = k[0]*dist[0]+k[1]*dist[1]
-            # print(f'state {n} after rot: {state}')
-            # print()
-            found, m = self.basis.search(self.state_2_list_entry(rot_state))
-            if found:
-                phase_r = 0
-                a = k[0]*np.sqrt(3)
-                if self.honeycomb and self.big_unit_cell:
-                    # phase_r = self.f_honeycomb(x,y)*a
-                    phase_r = -y*a   #why this phase? x=0, f(y)=-y
-                elif not self.honeycomb and self.big_unit_cell:
-                    # phase_r = self.f_triangular(x,y)*a 
-                    phase_r = (-y)%3*a      #x=0, f(y)=mod_3(-y)
-                (rep, _, m3) = self.is_representative[m]
-                row.append(m3)
-                col.append(n)
-                if rep:
-                    data.append(np.exp(1j*(phase_t+phase_r)))
-                else:
-                    a = self.dist_2_phys_dist(rot_state['hole_pos'][1] - rot_state['hole_pos'][0], rot_state['seq'])
-                    data.append(np.real_if_close(p * np.exp(-1j*(a[0]*k[0]+a[1]*k[1] + phase_t+phase_r))))
-            else:
-                print(f'Couldrt find rot_state for state {n}')
-
-        R = csr_matrix((data, (row, col)), shape=(len(self.representatives), len(self.representatives)))
-        return R
-    
     def build_rot_matrix(self, k, p=-1):
         row = []
         col = []
