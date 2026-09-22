@@ -906,8 +906,9 @@ class StringBasis:
             for i in range(k_array.shape[0]):
                 k=k_array[i,:]
                 self.compute_H(k, t, j, j_perp, p=p, V=V)
-                E.append(self.eigensys(num_n -1, full=True)[0])
-                evs.append(self.eigensys(num_n -1, full=True)[1])
+                energies, vectors = self.eigensys(num_n -1, full=True)
+                E.append(energies)
+                evs.append(vectors)
         return np.array(E), np.array(evs)
 
     def brick_to_hc(self, x,y, sl):
