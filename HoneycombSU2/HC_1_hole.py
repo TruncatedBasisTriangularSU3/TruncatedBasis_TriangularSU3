@@ -343,9 +343,10 @@ class StringBasisHC:
         ky = k[1]
         #upper right matrix (h_kA^dag,h_kB)
         if len(self.data_t1) > 0:
-            data_t = np.concatenate((t * np.exp(complex(0,-1/2*(np.sqrt(3)*kx-3*ky))) * self.data_t1,
-                                     t * np.exp(complex(0,-1/2*(-np.sqrt(3)*kx-3*ky))) * self.data_t2,
-                                     t * np.exp(complex(0,0)) * self.data_t3), axis=0)
+            hop_phases = self._forward_hop_phases(k)
+            data_t = np.concatenate((t * hop_phases[0] * self.data_t1,
+                                     t * hop_phases[1] * self.data_t2,
+                                     t * hop_phases[2] * self.data_t3), axis=0)
             
             # data_t = np.concatenate((t * np.exp(complex(0,-1/2*(np.sqrt(3)*kx-ky))) * self.data_t1,
             #                          t * np.exp(complex(0,-1/2*(-np.sqrt(3)*kx-ky))) * self.data_t2,
@@ -395,27 +396,57 @@ class StringBasisHC:
         
         self.H.eliminate_zeros() # (only helpful if either t or j = 0)
 
-    def rot_trial_state(self, m3, k):
-        '''Computes unnormalized trial state with given rotational C6 eigenvalue m6 and momentum k'''
-        lat = np.zeros((self.L_size, self.L_size), dtype=bool)
-        #Neel state, 0=A sublattice: connection to upper site
-        #=> hole on even site, i.e. all even sites have connection to upper site, odd to lower site
-        state0 = {'lat': lat, 'sl': 0}
-        v = np.zeros((self.basis.length), dtype=complex)
-        lat = np.zeros((self.L_size, self.L_size), dtype=bool)
-        steps = [[0, 1], [0, -1], [-1, 0]] #hole 0 moves from sl 0 to 1
-        for n, step in enumerate(steps):
-            step = np.array(step, dtype=int)
-            state = copy.deepcopy(state0)
-            lat = self.make_step(state['lat'], step)
-            sl = (state['sl'] + 1)%2 #each hop changes the sublattice
-            state = {'lat': lat, 'sl': sl}
+    @staticmethod
+    def _forward_hop_phases(k):
+        """Bloch phases of the three A-to-B hopping channels t1, t2, t3."""
+        kx, ky = np.asarray(k, dtype=float)
+        return np.array([
+            np.exp(-0.5j * (np.sqrt(3)*kx - 3*ky)),
+            np.exp(-0.5j * (-np.sqrt(3)*kx - 3*ky)),
+            1.0,
+        ], dtype=complex)
 
+    def _hopping_phase(self, row, col, k):
+        """Bloch phase of the directed hopping matrix element <row|H_t|col>."""
+        channels = ((self.row_t1, self.col_t1),
+                    (self.row_t2, self.col_t2),
+                    (self.row_t3, self.col_t3))
+        for phase, (rows, cols) in zip(self._forward_hop_phases(k), channels):
+            if any(r == row and c == col for r, c in zip(rows, cols)):
+                return phase
+            if any(r == col and c == row for r, c in zip(rows, cols)):
+                return phase.conjugate()
+        raise ValueError(f"No hopping matrix element connects basis states {col} and {row}.")
+
+    def _odd_string_rotation_angle(self, k, sl):
+        # rotate_state implements the physical C3^2 cycle, so odd-length strings
+        # pick up a gauge phase whose sign depends on the hole sublattice.
+        k = np.asarray(k, dtype=float)
+        return (1 - 2*sl) * 1/2 * (np.sqrt(3)*k[0] + 3*k[1])
+
+    def rot_trial_state(self, m3, k):
+        '''Computes unnormalized trial state with given rotational C3 eigenvalue m3 and momentum k'''
+        lat = np.zeros((self.L_size, self.L_size), dtype=bool)
+        state0 = {'lat': lat, 'sl': self.initial_sl}
+        v = np.zeros((self.basis.length), dtype=complex)
+        found, zero_index = self.basis.search(self.state_2_list_entry(state0))
+        if not found:
+            raise ValueError("Zero-string state is missing from the basis.")
+        # Build the one-step orbit with the same real-space C3^2 action used by
+        # rotate_state/calc_rot_mat, and weight each hop with the Bloch phase
+        # compute_H actually gives it. The m3=0 vector is then exactly
+        # H_t(k)|zero>/sqrt(3)t at every k, not only at Gamma/K/K'.
+        step = np.array(self.moves[self.initial_sl][0], dtype=int)
+        lat = self.make_step(state0['lat'].copy(), step)
+        state = {'lat': lat, 'sl': (state0['sl'] + 1)%2}
+        for n in range(3):
             # search for this state in the basis
             a = self.state_2_list_entry(state)
             found, j = self.basis.search(a)
             if found:
-                v[j] += 1/(np.sqrt(3)) * np.exp(1j * m3 * n * 2*np.pi/3-1j*1/2*(np.sqrt(3)*k[0]+3*k[1])*n)
+                hop_phase = self._hopping_phase(j, zero_index, k)
+                v[j] += hop_phase * np.exp(1j * m3 * n * 2*np.pi/3) / np.sqrt(3)
+            state = self.rotate_state(state)
         return v
 
     def eigenval(self, state=0):
@@ -502,8 +533,9 @@ class StringBasisHC:
             for i in range(k_array.shape[0]):
                 k=k_array[i,:]
                 self.compute_H(k, t, j)
-                E.append(self.eigensys(num_n -1, full=True)[0])
-                evs.append(self.eigensys(num_n -1, full=True)[1])
+                energies, vectors = self.eigensys(num_n -1, full=True)
+                E.append(energies)
+                evs.append(vectors)
                 
         return np.array(E), np.array(evs)
 
@@ -558,7 +590,7 @@ class StringBasisHC:
             found, i = self.basis.search(a)
             l = np.sum(state_rot['lat'])
             if l%2 != 0:
-                Rm[i,j] = 1*np.exp(-1j*1/2*(np.sqrt(3)*k[0]+3*k[1]))
+                Rm[i,j] = np.exp(1j * self._odd_string_rotation_angle(k, state['sl']))
             else:
                 Rm[i,j] = 1
         self.rot_mat = Rm
