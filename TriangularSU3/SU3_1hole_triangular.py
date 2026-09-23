@@ -685,6 +685,52 @@ class StringBasis:
         R = csr_matrix((data, (row, col)), shape=(self.basis.length, self.basis.length), dtype=np.csingle)
         return R
     
+    def _hopping_phase(self, row, col, k):
+        """Bloch phase of the directed hopping matrix element <row|H_t|col>."""
+        # We zip through the explicitly calculated forward hops from matrix_el
+        for idx, (r, c) in enumerate(zip(self.row_t, self.col_t)):
+            if r == row and c == col:
+                # Forward hop phase
+                return np.exp(1j * (self.data_t[idx, 0] * k[0] + self.data_t[idx, 1] * k[1]))
+            if r == col and c == row:
+                # Backward hop phase (Hermitian conjugate picks up negative phase)
+                return np.exp(-1j * (self.data_t[idx, 0] * k[0] + self.data_t[idx, 1] * k[1]))
+        
+        raise ValueError(f"No hopping matrix element connects basis states {col} and {row}.")
+
+    def rot_trial_state(self, m3, k):
+        '''Computes unnormalized trial state with given rotational C3 eigenvalue m3 and momentum k'''
+        lat = self.Neel_state[0]
+        seq = []
+        state0 = {'lat': lat, 'seq': seq}
+        v = np.zeros((self.basis.length), dtype=complex)
+        
+        # 1. Locate the vacuum (zero-string) state
+        found, zero_index = self.basis.search(self.state_2_list_entry(state0))
+        if not found:
+            raise ValueError("Zero-string state is missing from the basis.")
+            
+        # 2. Build the one-step seed (using the first symmetric step)
+        step = np.array([-1, -1], dtype=int)
+        lat = self.make_step(state0['lat'].copy(), step)
+        state = {'lat': lat, 'seq': [step]}
+        
+        # 3. Apply the true physical C3 orbit exactly as in HC_1_hole_2
+        for n in range(3):
+            a = self.state_2_list_entry(state)
+            found, j = self.basis.search(a)
+            if found:
+                # Ask the Hamiltonian for the EXACT gauge phase for this state
+                hop_phase = self._hopping_phase(j, zero_index, k)
+                
+                # Superimpose with the representation eigenvalue
+                v[j] += hop_phase * np.exp(-1j * m3 * n * 2 * np.pi / 3) / np.sqrt(3)
+                
+            # Physically rotate the string geometry for the next iteration (maps [-1,-1] -> [0,1] -> [1,0])
+            state = self.rot_state_120(state)
+            
+        return v
+
     def rot_trial_state_old(self, m3, k):
         lat = self.Neel_state[0]
         seq = []
@@ -706,37 +752,6 @@ class StringBasis:
             
             if found:
                 v[j] += 1/(np.sqrt(3)) * np.exp(1j * n * (2*np.pi/3 * m3)) * np.exp(-1j * k_phase) 
-        return v
-    
-    def rot_trial_state(self, m3, k):
-        lat = self.Neel_state[0]
-        seq = []
-        state0 = {'lat': lat, 'seq': seq}
-        v = np.zeros((self.basis.length), dtype=complex)
-        lat = np.zeros((self.L_size, self.L_size), dtype=bool)
-        steps = [[-1, -1],[0, 1], [1, 0]] # green hole moves from sl 0 to 1
-        
-        # 1. Determine the gauge momentum phase per rotation
-        k_phase = 0
-        if self.honeycomb and self.big_unit_cell:
-            # Matches the phase from build_rot_matrix for honeycomb odd sublattice
-            k_phase = -1/2 * (k[0] * np.sqrt(3) + k[1] * 3)
-        elif not self.honeycomb and self.big_unit_cell:
-            # Matches the phase from build_rot_matrix for triangular sublattice 1
-            k_phase = -2 * k[0] * np.sqrt(3)
-            
-        for n, step in enumerate(steps):
-            state = copy.deepcopy(state0)
-            lat = self.make_step(state['lat'], step)
-            seq = state['seq'] + [step]
-            state = {'lat': lat, 'seq': seq}
-
-            a = self.state_2_list_entry(state)
-            found, j = self.basis.search(a)
-            
-            if found:
-                # 2. Multiply BOTH m3 and k_phase by n to apply the relative phase shifts
-                v[j] += 1/(np.sqrt(3)) * np.exp(-1j * n * (2*np.pi/3 * m3 - k_phase)) 
         return v
 # -----------------------------------------------------------------------------------
 

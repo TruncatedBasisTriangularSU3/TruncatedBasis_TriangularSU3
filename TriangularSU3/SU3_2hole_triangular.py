@@ -712,7 +712,8 @@ class StringBasis:
                                 #print(f'i = {i}, seq_i={seq}, j = {j}, seq_j={self.representatives[j]['seq']}, step = {step}, rep')
                             else:
                                 self.data_t2.append((1, -1*self.dist_2_phys_dist(hole_pos1[1] - self.depth - 1,seq))) #distance in physical lattice  
-         
+        # print(f'number j_perp couplings: {len(self.data_j_perp)}') 
+    
     def compute_H(self, k, t=1, j=0.3, j_perp=0.3, t2=0, p=-1, V=0):
     # uses list of data points from matrix_el_j and momentum to create sparse matrix H
     # k (array of size (2,1)) = hole momentum in LLP-frame
@@ -794,22 +795,6 @@ class StringBasis:
             sort_ind = np.argsort(Es)
             vs = vs[:, sort_ind]
             return vs[:,state]
-    
-    def eigensys(self, state=0, full=False):
-    # computes smallest eigenvalue of H
-        # Es, vs = eigsh(self.H,k=state+1,which='SA',tol=self.tol)
-        if self.depth > 2:
-            Es, vs = eigsh(self.H,k=state+1,which='SA',tol=self.tol)
-        else:
-            Es, vs = eigh(self.H.toarray())
-        sort_ind = np.argsort(Es)
-        Es = Es[sort_ind]
-        vs = vs[:, sort_ind]
-        if full:
-            return Es, vs
-        else:
-            
-            return Es[state], vs[:,state]
         
     def eigensys(self, state=0, full=False, v0=None):
         if self.depth > 2:
@@ -1180,40 +1165,69 @@ class StringBasis:
 
         return csr_matrix((data, (row, col)), shape=(len(self.representatives), len(self.representatives)), dtype=complex)
 
-    # def rot_trial_state(self, m3, k, p=-1): #p is parity under particle exchange
-    #     '''Computes unnormalized trial state with given rotational C3 eigenvalue m3 and momentum k'''
-    #     assert len(self.representatives) > 0
-    #     v = np.zeros((len(self.representatives)), dtype=complex)
-    #     lat = self.Neel_state[0]
-    #     hole_pos = [np.ones((2,), dtype=int) * (self.depth + 1) for _ in range(2)]
-    #     seq = []
-    #     state0 = {'lat': lat, 'hole_pos': hole_pos, 'seq': seq}
-    #     steps = [[1, 1, 0], [1, 0, 1], [1, -1, -1]] #hole 1 moves from sl 0 to 1
-    #     for n, step in enumerate(steps):
-    #         step = np.array(step, dtype=int)
-    #         state = copy.deepcopy(state0)
-    #         lat, hole_pos = self.make_step(state['lat'], state['hole_pos'], step)
-    #         seq = state['seq'] + [step]
-    #         state = {'lat': lat, 'hole_pos': hole_pos, 'seq': seq}
-
-    #         # search for this state in the basis of representatives
-    #         found,m=self.basis.search(self.state_2_list_entry(state))
-    #         rep, _, j = self.is_representative[m]
-    #         if found:
-    #             phase = 0
-    #             phase_t = 0
-    #             x,_ = self.find_hole_sublattice(state['seq'])
-    #             a = np.sqrt(3)
-    #             if self.big_unit_cell:
-    #                 # phase = self.f(x,y)*a
-    #                 phase_t = -self.g(x)*a
-    #             if not rep:
-    #                 a = self.dist_2_phys_dist(hole_pos[1] - self.depth - 1, seq)
-    #                 phase = -1 * (a[0]*k[0]+a[1]*k[1]) + (p<0) * np.pi + phase_t
-    #             v[j] += 1/np.sqrt(3) * np.exp(1j * m3 * n * 2*np.pi/3 + 1j*phase) 
-    #     return v
-
     def rot_trial_state(self, m3, k, p=-1):
+        """
+        Computes an unnormalized trial state with given C3 rotational quantum 
+        number m3 in {0, 1, 2} and momentum k. 
+        """
+        assert len(self.representatives) > 0
+
+        # 1. Base reference state: single bond hop (hole 1 moves from sl 0 to 1)
+        lat = self.Neel_state[0]
+        hole_pos = [np.ones((2,), dtype=int) * (self.depth + 1) for _ in range(2)]
+        state0 = {'lat': lat, 'hole_pos': hole_pos, 'seq': []}
+        step0 = np.array([1, 1, 0], dtype=int)
+
+        # Deep copy to prevent modifying the Neel state reference in place
+        state_base = copy.deepcopy(state0)
+        lat_base, hole_pos_base = self.make_step(state_base['lat'], state_base['hole_pos'], step0)
+        state_base['lat'] = lat_base
+        state_base['hole_pos'] = hole_pos_base
+        state_base['seq'] = [step0]
+
+        # Locate base state in representative basis
+        found, m = self.basis.search(self.state_2_list_entry(state_base))
+        assert found, "Base trial state not found in basis"
+        rep, _, j = self.is_representative[m]
+
+        # Helper to get the base state vector evaluated at a specific momentum q
+        def get_v0(q):
+            vq = np.zeros(len(self.representatives), dtype=complex)
+            if rep:
+                vq[j] = 1.0
+            else:
+                b = self.dist_2_phys_dist(state_base['hole_pos'][1] - state_base['hole_pos'][0], state_base['seq'])
+                phase_exchange = b[0] * q[0] + b[1] * q[1]
+                vq[j] = p * np.exp(-1j * phase_exchange)
+            return vq
+
+        # 2. C3 rotations map momenta k -> C3 k -> C3^2 k -> k.
+        # To construct a state at momentum k, the n-th rotated component must be 
+        # evaluated from the preimage momentum q = C3^{-n} k.
+        theta = -2 * np.pi / 3
+        C3 = np.array([[np.cos(theta), -np.sin(theta)],
+                       [np.sin(theta),  np.cos(theta)]])
+        
+        # Generate the sequence of pre-image momenta
+        k1 = C3 @ k        # C3 k
+        k2 = C3 @ k1       # C3^2 k
+        
+        # Term 0: unrotated state at momentum k
+        v = (1.0 / np.sqrt(3.0)) * get_v0(k)
+
+        # Term 1: 1st rotation maps k2 -> k
+        R2 = self.build_rot_matrix(k2, p=p)
+        v1 = R2 @ get_v0(k2)
+        v += (1.0 / np.sqrt(3.0)) * np.exp(-1j * m3 * 1 * 2.0 * np.pi / 3.0) * v1
+
+        # Term 2: 2nd rotation maps k1 -> k2 -> k
+        R1 = self.build_rot_matrix(k1, p=p)
+        v2 = R2 @ (R1 @ get_v0(k1))
+        v += (1.0 / np.sqrt(3.0)) * np.exp(-1j * m3 * 2 * 2.0 * np.pi / 3.0) * v2
+
+        return v
+
+    def rot_trial_state_old(self, m3, k, p=-1):
         """
         Computes an unnormalized trial state with given C3 rotational quantum 
         number m3 in {0, 1, 2} and momentum k using the representation matrix 
@@ -1412,17 +1426,16 @@ if __name__ == "__main__":
         "t": 1.0,
         "t2": 0,
         "fermions": True,
-        "connected": True,  
+        "connected": False,  
         "state": 6,
         "grid_size": 3.3,  
         "points_2D": 67,
         "points_1D": 180,
         "honeycomb": True,
-        "unit_cell": True,
+        "unit_cell": 1,
         "1D_disp": True,
-        "2D_disp": True,
+        "2D_disp": False,
         "all_2D_bands": False,
         "Magnetic_BZ": True
     }
     run(args)
-
