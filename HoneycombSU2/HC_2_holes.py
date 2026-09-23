@@ -370,15 +370,21 @@ class StringBasis:
                         self.col_j_perp.append(i)
                         self.col_j_perp.append(j)
                         if rep:
-                            self.data_j_perp.append((0,np.zeros((2,), dtype=int)))
-                            self.data_j_perp.append((0,np.zeros((2,), dtype=int)))
+                            self.data_j_perp.append((0,np.zeros((2,), dtype=int), sl))
+                            self.data_j_perp.append((0,np.zeros((2,), dtype=int), sl))
                         else:
-                            self.data_j_perp.append((1,-1*(hole_pos[1] - self.depth - 1), sl))
-                            self.data_j_perp.append((1,(hole_pos[1] - self.depth - 1), sl))
-                        
+                            # same hole-hole displacement convention as calc_rot_mat:
+                            # shift to a same-sublattice distance, otherwise the //2 in
+                            # brick_to_hc_distance floor-divides an odd number.
+                            phase = (hole_pos[1] - self.depth - 1)
+                            if sl[0]!=sl[1]:
+                                phase[0] += 2*(sl[0]-0.5)
+                            self.data_j_perp.append((1,-1*phase, sl))
+                            self.data_j_perp.append((1,phase.copy(), sl))
 
+                    # restore the two sites flipped above (site[0],site[1]+1), not (site[0]+1,site[1])
                     lat1[site[0],site[1]]=True
-                    lat1[site[0]+1,site[1]]=True
+                    lat1[site[0],site[1]+1]=True
 
                 if (self.L_size*site[0]+site[1]+sl[0])%2==1: #bond downwards
                     if lat1[site[0],site[1]] and lat1[site[0]+1,site[1]]:
@@ -548,9 +554,17 @@ class StringBasis:
             vs = vs[:, sort_ind]
             return vs[:,state]
     
-    def eigensys(self, state=0, full=False):
+    def eigensys(self, state=0, full=False, dense=False):
     # computes smallest eigenvalue of H
-        Es, vs = eigsh(self.H,k=state+1,which='SA',tol=self.tol)
+    # dense=True: full double-precision diagonalisation. H is stored in single
+    # precision, and ARPACK returns only ~1e-3 orthonormal vectors inside a
+    # near-degenerate multiplet, which makes any per-band decomposition noisy.
+        if dense:
+            Es, vs = np.linalg.eigh(self.H.toarray().astype(np.complex128))
+            Es = Es[:state+1]
+            vs = vs[:,:state+1]
+        else:
+            Es, vs = eigsh(self.H,k=state+1,which='SA',tol=self.tol)
         sort_ind = np.argsort(Es)
         Es = Es[sort_ind]
         vs = vs[:, sort_ind]
@@ -887,7 +901,7 @@ class StringBasis:
                 E.append(self.eigenval(state))
         return np.array(E)
 
-    def dispersion_nmax(self,k_array,two_D=False, num_n=1, t=1, j=0.3, j_perp=0.3, p=-1, V=0):
+    def dispersion_nmax(self,k_array,two_D=False, num_n=1, t=1, j=0.3, j_perp=0.3, p=-1, V=0, dense=False):
     # returns array of energies corresponding to the moments in k_array
     # 2D == False: k_array = array of shape (Num_points,2)
     # 2D == True: k_array = Meshgrid(x,y)
@@ -906,7 +920,7 @@ class StringBasis:
             for i in range(k_array.shape[0]):
                 k=k_array[i,:]
                 self.compute_H(k, t, j, j_perp, p=p, V=V)
-                energies, vectors = self.eigensys(num_n -1, full=True)
+                energies, vectors = self.eigensys(num_n -1, full=True, dense=dense)
                 E.append(energies)
                 evs.append(vectors)
         return np.array(E), np.array(evs)
