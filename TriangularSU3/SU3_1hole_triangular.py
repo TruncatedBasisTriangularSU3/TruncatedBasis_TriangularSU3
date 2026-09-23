@@ -685,7 +685,7 @@ class StringBasis:
         R = csr_matrix((data, (row, col)), shape=(self.basis.length, self.basis.length), dtype=np.csingle)
         return R
     
-    def rot_trial_state(self, m3, k):
+    def rot_trial_state_old(self, m3, k):
         lat = self.Neel_state[0]
         seq = []
         state0 = {'lat': lat, 'seq': seq}
@@ -706,6 +706,37 @@ class StringBasis:
             
             if found:
                 v[j] += 1/(np.sqrt(3)) * np.exp(1j * n * (2*np.pi/3 * m3)) * np.exp(-1j * k_phase) 
+        return v
+    
+    def rot_trial_state(self, m3, k):
+        lat = self.Neel_state[0]
+        seq = []
+        state0 = {'lat': lat, 'seq': seq}
+        v = np.zeros((self.basis.length), dtype=complex)
+        lat = np.zeros((self.L_size, self.L_size), dtype=bool)
+        steps = [[-1, -1],[0, 1], [1, 0]] # green hole moves from sl 0 to 1
+        
+        # 1. Determine the gauge momentum phase per rotation
+        k_phase = 0
+        if self.honeycomb and self.big_unit_cell:
+            # Matches the phase from build_rot_matrix for honeycomb odd sublattice
+            k_phase = -1/2 * (k[0] * np.sqrt(3) + k[1] * 3)
+        elif not self.honeycomb and self.big_unit_cell:
+            # Matches the phase from build_rot_matrix for triangular sublattice 1
+            k_phase = -2 * k[0] * np.sqrt(3)
+            
+        for n, step in enumerate(steps):
+            state = copy.deepcopy(state0)
+            lat = self.make_step(state['lat'], step)
+            seq = state['seq'] + [step]
+            state = {'lat': lat, 'seq': seq}
+
+            a = self.state_2_list_entry(state)
+            found, j = self.basis.search(a)
+            
+            if found:
+                # 2. Multiply BOTH m3 and k_phase by n to apply the relative phase shifts
+                v[j] += 1/(np.sqrt(3)) * np.exp(-1j * n * (2*np.pi/3 * m3 - k_phase)) 
         return v
 # -----------------------------------------------------------------------------------
 

@@ -12,10 +12,10 @@ reload(helper_sc_cc_overlaps)
 from HoneycombSU2.helper_sc_cc_overlaps import make_triangular_grid_bz
 
 #set system parameters
-l_sc = 4
+l_sc = 5
 initial_sl = 0
-l_cc = 4
-n_bands = 6
+l_cc = 5
+n_bands = 1
 
 t = 1
 J = 0.3
