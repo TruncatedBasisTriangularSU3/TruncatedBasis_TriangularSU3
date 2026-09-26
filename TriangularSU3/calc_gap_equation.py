@@ -39,8 +39,10 @@ t2_overlaps = 0.1
 depth_sc = 7
 depth_cc = 7
 l_max_sc_overlaps = 4
-# k_cc = np.array([0,0])
-k_cc = 4*np.pi/(3*np.sqrt(3))*np.array([1, 0]) # K-point
+kcc = 0 #imput 0 for Gamma, 1 for K, 2 for K'
+k_cc = np.array([0,0]) if k_cc_at_Gamma else 4*np.pi/(3*np.sqrt(3))*np.array([1, 0]) # K-point
+K_cc ='Gamma' if k_cc_at_Gamma else 'K'
+# k_cc = 4*np.pi/(3*np.sqrt(3))*np.array([1, 0]) # K-point
 unit_cell = 1
 
 # gap parameters
@@ -76,7 +78,7 @@ if calc_overlaps:
     # k2 = np.array([np.full((L, L), k_cc[0]), np.full((L, L), k_cc[1])])
     k2 = np.array([np.full(k_shape, k_cc[0]), np.full(k_shape, k_cc[1])])
     k2 = k2 - k1
-    print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, k_cc = {k_cc}')
+    print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, k_cc = {K_cc}')
 
     v0 = np.ones((lat_sc1.basis.length,))
     print('sc basis length:',lat_sc1.basis.length)
@@ -186,7 +188,7 @@ if calc_overlaps:
 
 if calc_overlaps:
     print("----------------- Calculating overlaps -----------------")
-    print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, k_cc = {k_cc}')
+    print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, k_cc = {K_cc}')
 
     print("1) t' overlaps")
     
@@ -361,7 +363,7 @@ if calc_overlaps:
     Ms_t2_0 = Ms0
     Ms_t2_1 = Ms1 
 
-    np.save(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', (Ms_t2_0, Ms_t2_1))
+    np.save(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_kcc={K_cc}_j{j}_jperp{j_perp}_t{t}.npy', (Ms_t2_0, Ms_t2_1))
 
     print("2) J_perp overlaps")
 
@@ -469,11 +471,11 @@ if calc_overlaps:
         Ms_j_0 = Ms0
         Ms_j_1 = Ms1
 
-    np.save(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', (Ms_j_0, Ms_j_1))
+    np.save(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_kcc={K_cc}_j{j}_jperp{j_perp}_t{t}.npy', (Ms_j_0, Ms_j_1))
     print("Overlap calculations complete.")
 else:
-    Ms_j_0, Ms_j_1 = np.load(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', allow_pickle=True)
-    Ms_t2_0, Ms_t2_1 = np.load(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', allow_pickle=True)
+    Ms_j_0, Ms_j_1 = np.load(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_kcc={K_cc}_j{j}_jperp{j_perp}_t{t}.npy', allow_pickle=True)
+    Ms_t2_0, Ms_t2_1 = np.load(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_kcc={K_cc}_j{j}_jperp{j_perp}_t{t}.npy', allow_pickle=True)
     sc_disp = np.load(f'../results/TRI/SU2Hcsc_disp_L81_depth6_t1_t20.2_J0.3_Jperp0.3.npy', allow_pickle=True)
     sc_disp = np.load(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{0}_J{j}_Jperp{j_perp}.npy', allow_pickle=True)
 
@@ -593,7 +595,7 @@ if k_cc[0] == 0 and k_cc[1] == 0:
     plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
     plt.tight_layout()
 
-    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_cc}_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 
     fig, axs = plt.subplots(3, 2, figsize=(15, 20))
     axs_flat = axs.flatten()
@@ -631,7 +633,7 @@ if k_cc[0] == 0 and k_cc[1] == 0:
     plt.tight_layout()
 
     # 4. Save and Show
-    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_cc}_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 
 else:
     Delta_k = delta1 * gamma0 + delta2 * gamma1
@@ -654,5 +656,5 @@ plt.suptitle(fr'$\Delta_k$ for $Q=K$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2
 plt.tight_layout()
 
 # 4. Save and Show
-plt.savefig(f'../results/figures/Delta_k/{system}_kcc=K_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_cc}_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 print('------------- finished plotting -------------')
