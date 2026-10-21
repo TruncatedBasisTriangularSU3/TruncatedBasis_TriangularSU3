@@ -40,9 +40,9 @@ connected = True
 t2=0
 t2_overlaps = 0.1
 
-depth_sc = 3
-depth_cc = 3
-l_max_sc_overlaps = 3
+depth_sc = 7
+depth_cc = 7
+l_max_sc_overlaps = 4
 
 # Define the 3 target momentum points instead of just 1
 k_ccs = [
@@ -99,133 +99,159 @@ if calc_overlaps:
     print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, computing for Gamma, K, K\',M')
 
     v0 = np.ones((lat_sc1.basis.length,))
-    print('sc basis length:',lat_sc1.basis.length)
-    if lat_sc1.basis.length >1:
+    print('sc basis length:', lat_sc1.basis.length)
+    if lat_sc1.basis.length > 1:
         for x in range(k_shape):
-            lat_sc1.compute_H(k1[:,x], j=j, t=t)
-            if lat_sc1.basis.length <=3:
+            lat_sc1.compute_H(k1[:, x], j=j, t=t)
+            if lat_sc1.basis.length <= 3:
                 Es, vs = np.linalg.eigh(lat_sc1.H)
             else:
-                if k1[0,x] == 0 and k1[1,x] == 0:
-                    Es, vs = eigsh(lat_sc1.H, k=3, which='SA', v0=v0)
+                k_num = 3 if (k1[0, x] == 0 and k1[1, x] == 0) else 2
+                Es, vs = eigsh(lat_sc1.H, k=k_num, which='SA', v0=v0)
+                idx = np.argsort(Es)
+                Es = Es[idx]
+                vs = vs[:, idx]
+            
+            # Diagonalize 2D degenerate subspace using C3 or mirror symmetry
+            if np.isclose(Es[0], Es[1], atol=1e-7):
+                if symmetry == "C3":
+                    U = lat_sc2.build_rot_matrix(k1[:, x])
+                elif symmetry == "sigma":
+                    U = lat_sc2.build_mirror_matrix(k1[:, x])
+                # Take only the 2 degenerate ground states (important at Gamma where k_num=3)
+                deg_basis, _ = np.linalg.qr(vs[:, :2])
+                Rm_small = deg_basis.conj().T @ U @ deg_basis
+                cs, states = np.linalg.eig(Rm_small)
+                
+                # Sort so the symmetric (+1) mirror eigenstate is always index 0
+                if symmetry == "sigma":
+                    sort_idx = np.argsort(-np.real(cs)) # +1 first, -1 second
+                    cs = cs[sort_idx]
+                    states = states[:, sort_idx]
+                    
+                new_basis = deg_basis @ states
+                v1 = new_basis[:, 0]
+            else:
+                v1 = vs[:, 0]
+
+            # Fix phase on l=0 state
+            phase_l0_state = np.exp(-1j * np.angle(v1[0])) 
+            v1 = v1 * phase_l0_state
+            vs_sc_1.append(v1)
+
+            # Loop over Gamma, K, K', M to get the sc2 state for each relative momentum k2s[p]
+            for p in range(len(K_labels)):
+                lat_sc2.compute_H(k2s[p][:, x], j=j, t=t)
+                if lat_sc2.basis.length <= 3:
+                    Es, vs = np.linalg.eigh(lat_sc2.H)
+                else:
+                    k_num = 3 if (k2s[p][0, x] == 0 and k2s[p][1, x] == 0) else 2
+                    Es, vs = eigsh(lat_sc2.H, k=k_num, which='SA', v0=v0)
                     idx = np.argsort(Es)
                     Es = Es[idx]
                     vs = vs[:, idx]
-                else:
-                    Es, vs = eigsh(lat_sc1.H, k=2, which='SA', v0=v0)
-            
-            # diagonalizes degenerate subspace using C3 symmetry or mirror symmetry
-            if np.isclose(Es[0],Es[1], atol=1e-7):
-                if symmetry == "C3":
-                    U = lat_sc2.build_rot_matrix(k1[:,x])
-                elif symmetry == "sigma":
-                    U = lat_sc2.build_mirror_matrix(k1[:,x])
-                deg_basis = vs
-                deg_basis, _ = np.linalg.qr(deg_basis)
-                Rm_small = deg_basis.conj().T @ U @ deg_basis
-                cs, states = np.linalg.eig(Rm_small)
-                new_basis = deg_basis @ states
-                v1 = new_basis[:,0]
-            else:
-                v1 = vs[:,0]
-
-            #fix phase
-            phase_l0_state = np.exp(-1j * np.angle(v1[0])) 
-            v1 = v1 * phase_l0_state
-            # n0 = find_l0_state_sc1(lat_sc1)
-            # v1 = v1*np.exp(-1j*np.angle(v1[n0]))
-            vs_sc_1.append(v1)
-
-            # Loop over Gamma, K, K' to get the sc2 state for each relative momentum k2s[p]
-            for p in range(len(K_labels)):
-                lat_sc2.compute_H(k2s[p][:,x], j=j, t=t)
-                if lat_sc2.basis.length <=3:
-                    Es, vs = np.linalg.eigh(lat_sc2.H)
-                else:
-                    if k1[0,x] == 0 and k1[1,x] == 0:
-                        Es, vs = eigsh(lat_sc2.H, k=3, which='SA', v0=v0)
-                        idx = np.argsort(Es)
-                        Es = Es[idx]
-                        vs = vs[:, idx]
-                    else:
-                        Es, vs = eigsh(lat_sc2.H, k=2, which='SA', v0=v0)
                 
-                # diagonalizes degenerate subspace using C3 symmetry or mirror symmetry
-                if np.isclose(Es[0],Es[1], atol=1e-7):
+                # Diagonalize 2D degenerate subspace using C3 or mirror symmetry
+                if np.isclose(Es[0], Es[1], atol=1e-7):
                     if symmetry == "C3":
-                        U = lat_sc2.build_rot_matrix(k2s[p][:,x])
+                        U = lat_sc2.build_rot_matrix(k2s[p][:, x])
                     elif symmetry == "sigma":
-                        U = lat_sc2.build_mirror_matrix(k2s[p][:,x])
-                    deg_basis = vs
-                    deg_basis, _ = np.linalg.qr(deg_basis)
+                        U = lat_sc2.build_mirror_matrix(k2s[p][:, x])
+                    deg_basis, _ = np.linalg.qr(vs[:, :2])
                     Rm_small = deg_basis.conj().T @ U @ deg_basis
                     cs, states = np.linalg.eig(Rm_small)
+                    
+                    if symmetry == "sigma":
+                        sort_idx = np.argsort(-np.real(cs)) # +1 first, -1 second
+                        cs = cs[sort_idx]
+                        states = states[:, sort_idx]
+                        
                     new_basis = deg_basis @ states
-                    v2 = new_basis[:,0]
+                    v2 = new_basis[:, 0]
                 else:
-                    v2 = vs[:,0]
+                    v2 = vs[:, 0]
                 
-                #fix phase
+                # Fix phase on l=0 state
                 phase_l0_state = np.exp(-1j * np.angle(v2[0])) 
                 v2 = v2 * phase_l0_state
-                # n0 = find_l0_state_sc2(lat_sc2) 
-                # v2 = v2*np.exp(-1j*np.angle(v2[n0])) 
 
-                # adding gauge phase (depends only on k1, so it remains the same across p)
+                # Adding gauge phase
                 theta = 2 * np.pi / 3
-                R_C3 = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta),  np.cos(theta)]])
-                r_0 = -(1/2)*np.sqrt(3) * np.array([1, -np.sqrt(3)]) 
-                R_0 = 1/3*(np.eye(2) - R_C3) @ r_0
-                phi_gauge = R_0[0]*k1[0,x] + R_0[1]*k1[1,x]
+                R_C3 = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+                r_0 = -(1/2) * np.sqrt(3) * np.array([1, -np.sqrt(3)]) 
+                R_0 = 1/3 * (np.eye(2) - R_C3) @ r_0
+                phi_gauge = R_0[0] * k1[0, x] + R_0[1] * k1[1, x]
                 v2 = v2 * np.exp(-1j * phi_gauge)
                 vs_sc_2_list[p].append(v2)
     else:
         vs_sc_1 = np.ones(k_shape)
-        vs_sc_2_list = [np.ones(k_shape) for _ in range(3)]
+        vs_sc_2_list = [np.ones(k_shape) for _ in range(len(K_labels))]
 
     vs_sc_1 = np.array(vs_sc_1).reshape((k_shape, lat_sc1.basis.length))
     for p in range(len(K_labels)):
         vs_sc_2_list[p] = np.array(vs_sc_2_list[p]).reshape((k_shape, lat_sc2.basis.length))
 
-    # Calculate CC eigensystem for Gamma, K, K'
+    # ----------------- Calculate ordered CC eigensystem -----------------
     v_cc_0_list = []
     v_cc_1_list = []
-    print('cc basis length:',lat_cc.basis.length)
+    print('cc basis length:', lat_cc.basis.length)
     for p in range(len(K_labels)):
         lat_cc.compute_H(k_ccs[p], t=t, j=j, j_perp=j)
         H_cc = lat_cc.H
         if depth_cc == 1:
             Es, vs = np.linalg.eigh(H_cc.toarray())
         else:
-            Es, vs = eigsh(H_cc, k=2, which='SA')
+            # Request k=3 at Gamma in case of closeness, then sort
+            Es, vs = eigsh(H_cc, k=3, which='SA')
+            idx = np.argsort(Es)
+            Es = Es[idx]
+            vs = vs[:, idx]
         
-        # diagonalizes degenerate subspace using C3 symmetry or mirror symmetry
-        if np.isclose(Es[0],Es[1], atol=1e-8):
+        # Diagonalize 2D degenerate subspace using C3 or mirror symmetry
+        if np.isclose(Es[0], Es[1], atol=1e-8):
             if symmetry == "C3":
                 U = lat_cc.build_rot_matrix(k_ccs[p])
             elif symmetry == "sigma":
                 U = lat_cc.build_mirror_matrix(k_ccs[p])
-            deg_basis = vs
-            deg_basis, _ = np.linalg.qr(deg_basis)
-            print(deg_basis.shape, U.shape,K_labels[p])
+                
+            deg_basis, _ = np.linalg.qr(vs[:, :2])
+            print(deg_basis.shape, U.shape, K_labels[p])
             Rm_small = deg_basis.conj().T @ U @ deg_basis
             cs, states = np.linalg.eig(Rm_small)
+            
+            # Order the cc states:
+            # For "sigma": index 0 is symmetric (+1), index 1 is antisymmetric (-1)
+            # For "C3": sort by phase angle of C3 eigenvalue (e^{+i 2pi/3} vs e^{-i 2pi/3})
+            if symmetry == "sigma":
+                sort_idx = np.argsort(-np.real(cs))
+            else:
+                sort_idx = np.argsort(np.angle(cs))
+            cs = cs[sort_idx]
+            states = states[:, sort_idx]
+            
             new_basis = deg_basis @ states
-            v_cc_0 = new_basis[:,0]
-            v_cc_1 = new_basis[:,1]
+            v_cc_0 = new_basis[:, 0]
+            v_cc_1 = new_basis[:, 1]
             v_cc_0 /= np.linalg.norm(v_cc_0)
             v_cc_1 /= np.linalg.norm(v_cc_1)
         else:
-            v_cc_0 = vs[:,0]
-            v_cc_1 = vs[:,1] * 0  #if not degenerate, set second eigenvector to zero
- 
-        idx0 = np.argmax(np.abs(v_cc_0))
-        v_cc_0 = v_cc_0 * np.exp(-1j * np.angle(v_cc_0[idx0]))
+            v_cc_0 = vs[:, 0]
+            v_cc_1 = np.zeros_like(vs[:, 0]) # if not degenerate, set second eigenvector to zero
 
-        idx1 = np.argmax(np.abs(v_cc_1))
-        v_cc_1 = v_cc_1 * np.exp(-1j * np.angle(v_cc_1[idx1]))
-        # v_cc_0 = v_cc_0 * np.exp(-1j * np.angle(v_cc_0[0]))
-        # v_cc_1 = v_cc_1 * np.exp(-1j * np.angle(v_cc_1[0]))
+        # Fix global phase of v_cc_0 and v_cc_1:
+        # Use the component with maximum amplitude among l=0 (first 3 bond states)
+        # so we never divide by a zero component on the mirror plane
+        idx_0 = np.argmax(np.abs(v_cc_0[:3]))
+        v_cc_0 = v_cc_0 * np.exp(-1j * np.angle(v_cc_0[idx_0]))
+        
+        if np.linalg.norm(v_cc_1) > 0:
+            idx_1 = np.argmax(np.abs(v_cc_1[:3]))
+            v_cc_1 = v_cc_1 * np.exp(-1j * np.angle(v_cc_1[idx_1]))
+
+        U_C3 = lat_cc.build_rot_matrix(k_ccs[p])
+        overlap_C3 = v_cc_1.conj().T @ (U_C3 @ v_cc_0)
+        if np.abs(overlap_C3) > 1e-6:
+            v_cc_1 = v_cc_1 * np.exp(1j * np.angle(overlap_C3))
         
         v_cc_0_list.append(v_cc_0)
         v_cc_1_list.append(v_cc_1)
