@@ -53,7 +53,7 @@ for i, k in enumerate(k_path):
         ops[i,j, 1] = np.abs(ol1)**2
         ol2 = np.dot(state, trial_state2.conj())
         ops[i,j, 2] = np.abs(ol2)**2
-ops = ops/np.max(ops)
+# ops = ops/np.max(ops)
 np.save(f"../results/TRI/{system}_2D_rot_overlaps_sc_depth={l_sc}_t={t}_j={J}_uc={unit_cell}.npy", ops)
 
 print("----------- calculating rotational overlaps 2holes -----------------")
@@ -71,6 +71,6 @@ for i, k in enumerate(k_path):
         ops[i,j, 1] = np.abs(ol1)**2
         ol2 = np.dot(state, trial_state2.conj())
         ops[i,j, 2] = np.abs(ol2)**2
-ops = ops/np.max(ops)
+# ops = ops/np.max(ops)
 np.save(f"../results/TRI/{system}_2D_rot_overlaps_cc_depth={l_cc}_t={t}_j={J}_uc={unit_cell}.npy", ops)
 print("----------- finished calculations -----------------")
