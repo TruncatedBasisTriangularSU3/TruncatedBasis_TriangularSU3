@@ -33,8 +33,8 @@ j = 0.3
 j_perp = 0.3
 t = 1
 connected = True
-t2=0
-t2_overlaps = 0.1
+t2=0   # t' in the sc and cc Hamiltonians (dispersions, eigenstates)
+t2_overlaps = 0.1   # t' in the scattering elements M only
 
 depth_sc = 7
 depth_cc = 7
@@ -57,10 +57,10 @@ if calc_overlaps:
     lat_sc1 = StringBasis(depth_sc, connected, honeycomb, unit_cell=unit_cell)
     lat_sc1.matrix_el()
     sc_disp = np.zeros([1,len(k_path)])
-    sc_disp, _ = lat_sc1.dispersion(k_path, two_D=False, state=1, t=t, t2=0, j=j, j_perp=j_perp)
+    sc_disp, _ = lat_sc1.dispersion(k_path, two_D=False, state=0, t=t, t2=t2, j=j, j_perp=j_perp)
 
     print('computed 2D dispersion in {t:.3f}s'.format(t=perf_counter()-t0))
-    np.save(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{0}_J{j}_Jperp{j_perp}.npy', sc_disp) #2D dispersion saved in array of shape (2, N)
+    np.save(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{t2}_J{j}_Jperp{j_perp}.npy', sc_disp) #2D dispersion saved in array of shape (2, N)
 
 
     print("----------------- Calculating eigenstates -----------------")
@@ -82,7 +82,8 @@ if calc_overlaps:
     print('sc basis length:',lat_sc1.basis.length)
     if lat_sc1.basis.length >1:
         for x in range(k_shape):
-            lat_sc1.compute_H(k1[:,x], j=j, t=t)
+            lat_sc1.compute_H(k1[:,x], j=j, t=t, j_perp=j_perp, t2=t2)
+            lat_sc1.H = lat_sc1.H.astype(np.complex128)  # in complex64 the Gamma doublet is split by ~1e-6 and not detected
             if lat_sc1.basis.length <=3:
                 Es, vs = np.linalg.eigh(lat_sc1.H)
             else:
@@ -107,11 +108,13 @@ if calc_overlaps:
             else:
                 v1 = vs[:,0]
             #fix phase
-            n0 = find_l0_state_sc1(lat_sc1)
-            v1 = v1*np.exp(-1j*np.angle(v1[n0])) #changed v1[0] to v1[n0] to fix phase according to l0 state
+            # phase reference is the l=0 (bare hole) basis state, which is basis index 0;
+            # find_l0_state_sc1 returns an energy-level index, not a basis index, so it must not be used here
+            v1 = v1*np.exp(-1j*np.angle(v1[0]))
             vs_sc_1.append(v1)
 
-            lat_sc2.compute_H(k2[:,x], j=j, t=t)
+            lat_sc2.compute_H(k2[:,x], j=j, t=t, j_perp=j_perp, t2=t2)
+            lat_sc2.H = lat_sc2.H.astype(np.complex128)  # see sc1
             Es, vs = eigsh(lat_sc2.H, k=2, which='SA', v0=v0)
             if lat_sc2.basis.length <=3:
                 Es, vs = np.linalg.eigh(lat_sc2.H)
@@ -126,7 +129,7 @@ if calc_overlaps:
             #print(f'sc2: for k={k1[:,x,y]} Es0 = {Es[0]}, Es1 = {Es[1]}, Es2 = {Es[2]}')
             if np.isclose(Es[0],Es[1], atol=1e-7):
                 print("eigenvaule of sc 2 degenerate! Rotating to R eigenvector...")
-                R = lat_sc2.build_rot_matrix(k1[:,x])
+                R = lat_sc2.build_rot_matrix(k2[:,x])
                 deg_basis = vs
                 deg_basis, _ = np.linalg.qr(deg_basis)
                 Rm_small = deg_basis.conj().T @ R @ deg_basis
@@ -136,8 +139,8 @@ if calc_overlaps:
             else:
                 v2 = vs[:,0]
             #fix phase
-            n0 = find_l0_state_sc2(lat_sc2) 
-            v2 = v2*np.exp(-1j*np.angle(v2[n0])) #changed v2[0] to v2[n0] to fix phase according to l0 state
+            # phase reference is the l=0 (bare hole) basis state, basis index 0 (see sc1 above)
+            v2 = v2*np.exp(-1j*np.angle(v2[0]))
 
             # adding gauge phase
             theta = 2 * np.pi / 3
@@ -156,8 +159,8 @@ if calc_overlaps:
     vs_sc_2 = np.array(vs_sc_2).reshape((k_shape, lat_sc2.basis.length))
     # print(f'vs_sc_1 shape post reshape: {np.array(vs_sc_1).shape}')
 
-    lat_cc.compute_H(k_cc, t=t, j=j, j_perp=j)
-    H_cc = lat_cc.H
+    lat_cc.compute_H(k_cc, t=t, j=j, j_perp=j_perp, t2=t2)
+    H_cc = lat_cc.H.astype(np.complex128)  # in complex64 the Gamma doublet is split by ~1e-5 > atol=1e-9
     if depth_cc ==1:
         Es, vs = np.linalg.eigh(H_cc.toarray())
     else:
@@ -260,8 +263,8 @@ if calc_overlaps:
                         # <cc|SS
                         state, state_uncropped = add_holes(n1, n2, jx, jy, lat_sc1, lat_sc2, lat_cc, too_large=too_large)
                         # print(state, state_uncropped)
-                        if type(state)==dict and not too_large:
-                            found, _ = lat_cc.basis.search(lat_cc.state_2_list_entry(state))    #discard states that are in the cc basis, since they should be either sc+sc or cc not both
+                        if type(state_uncropped)==dict:  # too_large configs can fit into the cc box after the hop
+                            found = type(state)==dict and lat_cc.basis.search(lat_cc.state_2_list_entry(state))[0]    #discard states that are in the cc basis, since they should be either sc+sc or cc not both
                             if found:
                                 continue
                             ### Hole 1 hops
@@ -361,7 +364,7 @@ if calc_overlaps:
     Ms_t2_0 = Ms0
     Ms_t2_1 = Ms1 
 
-    np.save(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', (Ms_t2_0, Ms_t2_1))
+    np.save(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}_t2{t2}.npy', (Ms_t2_0, Ms_t2_1))
 
     print("2) J_perp overlaps")
 
@@ -469,13 +472,13 @@ if calc_overlaps:
         Ms_j_0 = Ms0
         Ms_j_1 = Ms1
 
-    np.save(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', (Ms_j_0, Ms_j_1))
+    np.save(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}_t2{t2}.npy', (Ms_j_0, Ms_j_1))
     print("Overlap calculations complete.")
 else:
-    Ms_j_0, Ms_j_1 = np.load(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', allow_pickle=True)
-    Ms_t2_0, Ms_t2_1 = np.load(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}.npy', allow_pickle=True)
+    Ms_j_0, Ms_j_1 = np.load(f'../results/TRI/Delta_k/M_j_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}_t2{t2}.npy', allow_pickle=True)
+    Ms_t2_0, Ms_t2_1 = np.load(f'../results/TRI/Delta_k/M_t_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}_t2{t2}.npy', allow_pickle=True)
     sc_disp = np.load(f'../results/TRI/SU2Hcsc_disp_L81_depth6_t1_t20.2_J0.3_Jperp0.3.npy', allow_pickle=True)
-    sc_disp = np.load(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{0}_J{j}_Jperp{j_perp}.npy', allow_pickle=True)
+    sc_disp = np.load(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{t2}_J{j}_Jperp{j_perp}.npy', allow_pickle=True)
 
 
     print('M_t shape:', Ms_t2_0.shape, 'M_j shape:', Ms_j_0.shape, 'sc_disp shape:', sc_disp.shape, 'k_grid shape:', k_grid.shape)
@@ -488,8 +491,8 @@ sc_bandwidth = np.max(sc_disp) - np.min(sc_disp)
 chem_pot1 = np.min(sc_disp)+c_p*sc_bandwidth
 epsilon = sc_disp - chem_pot1 
 
-M0 = j_perp * Ms_j_0  + t2 * Ms_t2_0    #M has units of energy
-M1 = j_perp * Ms_j_1  + t2 * Ms_t2_1
+M0 = j_perp * Ms_j_0  + t2_overlaps * Ms_t2_0    #M has units of energy
+M1 = j_perp * Ms_j_1  + t2_overlaps * Ms_t2_1
 
 V = 9*np.sqrt(3)/2 * ((L-1)/2)**2   #real space volume of the system
 
@@ -526,8 +529,8 @@ def solve_coupled_gaps(eps_k, gamma_0, gamma_1, g, beta, initial_guess=(0.1, 0.1
         Ek_safe = np.where(Ek < 1e-12, 1e-12, Ek)
         thermal = np.tanh(beta * Ek_safe / 2.0) / (2 * Ek_safe)
 
-        target_d0 = g/V * np.sum(gap_total * np.conjugate(gamma_0) / (2 * Ek) * thermal)
-        target_d1 = g/V * np.sum(gap_total * np.conjugate(gamma_1) / (2 * Ek) * thermal)
+        target_d0 = g/V * np.sum(gap_total * np.conjugate(gamma_0) * thermal)  # thermal already contains 1/(2E)
+        target_d1 = g/V * np.sum(gap_total * np.conjugate(gamma_1) * thermal)
         
         # We want d0 - target_d0 = 0 and d1 - target_d1 = 0
         res_d0 = d0 - target_d0
@@ -593,7 +596,7 @@ if k_cc[0] == 0 and k_cc[1] == 0:
     plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
     plt.tight_layout()
 
-    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}_phases60deg.pdf')
 
     fig, axs = plt.subplots(3, 2, figsize=(15, 20))
     axs_flat = axs.flatten()
@@ -631,7 +634,7 @@ if k_cc[0] == 0 and k_cc[1] == 0:
     plt.tight_layout()
 
     # 4. Save and Show
-    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=0_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}_phases120deg.pdf')
 
 else:
     Delta_k = delta1 * gamma0 + delta2 * gamma1
@@ -642,7 +645,7 @@ else:
     axs[0].set_title(fr'$|\Delta_k|$')
     fig.colorbar(im_abs, ax=axs[0])
     axs[0].set_xlabel(r'$k_x$')
-    axs[0].set_xlabel(r'$k_y$')
+    axs[0].set_ylabel(r'$k_y$')
     # --- Plot Imaginary Part (using twilight) ---
     im_angle = axs[1].tripcolor(triang, np.angle(Delta_k), 
                                         shading='gouraud', cmap='twilight')
@@ -650,9 +653,9 @@ else:
     fig.colorbar(im_angle, ax=axs[1])
     axs[1].set_xlabel(r'$k_x$')
 
-plt.suptitle(fr'$\Delta_k$ for $Q=K$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
-plt.tight_layout()
+    plt.suptitle(fr'$\Delta_k$ for $Q=K$, $\mu={c_p}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
+    plt.tight_layout()
 
-# 4. Save and Show
-plt.savefig(f'../results/figures/Delta_k/{system}_kcc=K_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+    # 4. Save and Show
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc=K_DeltaE{delta_E}_cp{c_p}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 print('------------- finished plotting -------------')
