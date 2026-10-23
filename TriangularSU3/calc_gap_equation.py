@@ -25,10 +25,10 @@ reload(SU3_helper_sc_cc_overlaps)
 from TriangularSU3.SU3_helper_sc_cc_overlaps import *
 
 
-calc_overlaps = True
+calc_overlaps = True   # choose whether to calculate the overlaps or just load them from file
 honeycomb = True
-cc_rot_basis = False
-symmetry = "C3" if cc_rot_basis else "sigma"
+cc_rot_basis = False   # choose in which basis degenerate states are diagonalized
+symmetry = "C3" if cc_rot_basis else "sigma"  
 system = 'SU2Hc' if honeycomb else 'SU3Tri'
 L=71
 Ly = L
@@ -37,12 +37,12 @@ j = 0.3
 j_perp = 0.3
 t = 1
 connected = True
-t2=0
-t2_overlaps = 0.1
+t2=0   # t' in the sc and cc Hamiltonians (dispersions, eigenstates)
+t2_overlaps = 0.1   # t' in the scattering elements M only
 
-depth_sc = 7
-depth_cc = 7
-l_max_sc_overlaps = 4
+depth_sc = 4
+depth_cc = 4
+l_max_sc_overlaps = 3
 
 # Define the 3 target momentum points instead of just 1
 k_ccs = [
@@ -72,10 +72,10 @@ if calc_overlaps:
     lat_sc1 = StringBasis(depth_sc, connected, honeycomb, unit_cell=unit_cell)
     lat_sc1.matrix_el()
     sc_disp = np.zeros([1,len(k_path)])
-    sc_disp, _ = lat_sc1.dispersion(k_path, two_D=False, state=1, t=t, t2=0, j=j, j_perp=j_perp)
+    sc_disp, _ = lat_sc1.dispersion(k_path, two_D=False, state=0, t=t, t2=t2, j=j, j_perp=j_perp)
 
     print('computed 2D dispersion in {t:.3f}s'.format(t=perf_counter()-t0))
-    np.save(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{0}_J{j}_Jperp{j_perp}.npy', sc_disp) #2D dispersion saved in array of shape (2, N)
+    np.save(f'../results/TRI/{system}sc_disp_L{L}_depth{depth_sc}_t{t}_t2{t2}_J{j}_Jperp{j_perp}.npy', sc_disp) #2D dispersion saved in array of shape (2, N)
 
 
     print("----------------- Calculating eigenstates -----------------")
@@ -96,14 +96,15 @@ if calc_overlaps:
         k2_p = np.array([np.full(k_shape, k_ccs[p][0]), np.full(k_shape, k_ccs[p][1])])
         k2s.append(k2_p - k1)
         
-    print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, computing for Gamma, K, K\',M')
+    print(f'depth_cc = {depth_cc}, depth_sc = {depth_sc}, l_max_sc_overlaps = {l_max_sc_overlaps}, L = {L}, computing for {K_labels}')
 
     v0 = np.ones((lat_sc1.basis.length,))
     print('sc basis length:', lat_sc1.basis.length)
     if lat_sc1.basis.length > 1:
         for x in range(k_shape):
-            lat_sc1.compute_H(k1[:, x], j=j, t=t)
-            if lat_sc1.basis.length <= 3:
+            lat_sc1.compute_H(k1[:,x], j=j, t=t, j_perp=j_perp, t2=t2)
+            lat_sc1.H = lat_sc1.H.astype(np.complex128)  # in complex64 the Gamma doublet is split by ~1e-6 and not detected
+            if lat_sc1.basis.length <=3:
                 Es, vs = np.linalg.eigh(lat_sc1.H)
             else:
                 k_num = 3 if (k1[0, x] == 0 and k1[1, x] == 0) else 2
@@ -115,9 +116,9 @@ if calc_overlaps:
             # Diagonalize 2D degenerate subspace using C3 or mirror symmetry
             if np.isclose(Es[0], Es[1], atol=1e-7):
                 if symmetry == "C3":
-                    U = lat_sc2.build_rot_matrix(k1[:, x])
+                    U = lat_sc1.build_rot_matrix(k1[:, x])
                 elif symmetry == "sigma":
-                    U = lat_sc2.build_mirror_matrix(k1[:, x])
+                    U = lat_sc1.build_mirror_matrix(k1[:, x])
                 # Take only the 2 degenerate ground states (important at Gamma where k_num=3)
                 deg_basis, _ = np.linalg.qr(vs[:, :2])
                 Rm_small = deg_basis.conj().T @ U @ deg_basis
@@ -141,7 +142,7 @@ if calc_overlaps:
 
             # Loop over Gamma, K, K', M to get the sc2 state for each relative momentum k2s[p]
             for p in range(len(K_labels)):
-                lat_sc2.compute_H(k2s[p][:, x], j=j, t=t)
+                lat_sc2.compute_H(k2s[p][:, x], j=j, t=t,t2=t2, j_perp=j_perp)
                 if lat_sc2.basis.length <= 3:
                     Es, vs = np.linalg.eigh(lat_sc2.H)
                 else:
@@ -196,8 +197,8 @@ if calc_overlaps:
     v_cc_1_list = []
     print('cc basis length:', lat_cc.basis.length)
     for p in range(len(K_labels)):
-        lat_cc.compute_H(k_ccs[p], t=t, j=j, j_perp=j)
-        H_cc = lat_cc.H
+        lat_cc.compute_H(k_ccs[p], t=t, j=j, j_perp=j_perp, t2=t2)
+        H_cc = lat_cc.H.astype(np.complex128)  # in complex64 the Gamma doublet is split by ~1e-5 > atol=1e-9
         if depth_cc == 1:
             Es, vs = np.linalg.eigh(H_cc.toarray())
         else:
@@ -559,8 +560,8 @@ for p, K_label in enumerate(K_labels):
     chem_pot1 = np.min(sc_disp)+c_p*sc_bandwidth
     epsilon = sc_disp - chem_pot1 
 
-    M0 = j_perp * Ms_j_0  + t2 * Ms_t2_0    #M has units of energy
-    M1 = j_perp * Ms_j_1  + t2 * Ms_t2_1
+    M0 = j_perp * Ms_j_0  + t2_overlaps * Ms_t2_0    #M has units of energy
+    M1 = j_perp * Ms_j_1  + t2_overlaps * Ms_t2_1
 
     V = 9*np.sqrt(3)/2 * ((L-1)/2)**2   #real space volume of the system
 
