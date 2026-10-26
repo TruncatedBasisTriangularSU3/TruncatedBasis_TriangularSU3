@@ -15,7 +15,7 @@ from TriangularSU3.SU3_2hole_triangular import StringBasis as basis_tri_2h
 #set system parameters
 l_sc = 6
 l_cc = 6
-n_bands = 1
+n_bands = 2
 
 t = 1
 t2 = 0
@@ -49,13 +49,13 @@ path4 = np.linspace(Kp, Gamma, int(points_1D/3)+1)
 k_path = np.vstack((path1, path2, path3, path4))
 x1 = np.linspace(0,points_1D,k_path.shape[0])
 
-# print("---------- calculating single hole disperion 2D ------------")
-# disp_1,_ = basis_1.dispersion(k_array=karray, two_D=True, j=J, t=t, t2=t2)
-# print("---------- calculating two hole disperion 2D ------------")
-# disp_2,_ = basis_2.dispersion(k_array=karray, two_D=True, j=J, t=t, t2=t2)
+print("---------- calculating single hole disperion 2D ------------")
+disp_1,_ = basis_1.dispersion(k_array=karray, two_D=True, j=J, t=t, t2=t2)
+print("---------- calculating two hole disperion 2D ------------")
+disp_2,_ = basis_2.dispersion(k_array=karray, two_D=True, j=J, t=t, t2=t2)
 
-# np.save(f"../results/TRI/{system}_2D_dispersion_cc_depth={l_cc}_t={t}_t2={t2}_j={J}_uc={unit_cell}.npy", disp_2)
-# np.save(f"../results/TRI/{system}_2D_dispersion_sc_depth={l_cc}_t={t}_t2={t2}_j={J}_uc={unit_cell}.npy", disp_1)
+np.save(f"../results/TRI/{system}_2D_dispersion_cc_depth={l_cc}_t={t}_t2={t2}_j={J}_uc={unit_cell}.npy", disp_2)
+np.save(f"../results/TRI/{system}_2D_dispersion_sc_depth={l_cc}_t={t}_t2={t2}_j={J}_uc={unit_cell}.npy", disp_1)
 
 print("----------- calculating ", n_bands, " bands -----------------")
 disp_bands_sc = []

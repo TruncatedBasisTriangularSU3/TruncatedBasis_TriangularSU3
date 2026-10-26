@@ -319,10 +319,10 @@ def sum_ind(i, j, Lx, Ly=0):
         L = np.array([Lx, Ly]).reshape((2,) + (len(i.shape)-1)*(1,))
     return np.mod(np.round(i+j-L/2), L).astype(int)
 
-def find_l0_state_sc1(lat: Lat_sc1, n_max=7): #used; #lower n_max for testing
+def find_l0_state_sc1(lat: Lat_sc1, n_max=7): 
     '''
     Find the first energy level which has considerable quasiparticle weight i.e. overlap with the zero string-length state.
-                #cc or sc?                                                                   cc or sc?
+
     ARGUMENTS:
     lat: Lat_sc: an instance of the sc lattice class, where the Hamiltonian has already been computed.
     n_max : int (optional): the highest energy level considered

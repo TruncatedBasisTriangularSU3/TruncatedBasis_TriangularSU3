@@ -685,6 +685,170 @@ class StringBasis:
         R = csr_matrix((data, (row, col)), shape=(self.basis.length, self.basis.length), dtype=np.csingle)
         return R
     
+    def mirror_y_state(self, state):
+        """Mirrors a 1-hole state across the physical x-axis (sigma_y: rx -> -rx, ry -> ry)."""
+        lat = state['lat']
+        seq = state['seq']
+
+        sublattice = self.find_sublattice(state)
+        lat1 = (lat - sublattice) % 3
+        lat1[self.depth + 1, self.depth + 1] = 0
+
+        ## 1. Mirror flipped spins on the lattice
+        row, col = np.nonzero(lat1)
+        val = lat[row, col]
+
+        # Shift to center-relative coordinates
+        i_rel = row - (self.depth + 1)
+        j_rel = col - (self.depth + 1)
+
+        # Apply (i, j) -> (-i, j - i)
+        mir_i = -i_rel + (self.depth + 1)
+        mir_j = (j_rel - i_rel) + (self.depth + 1)
+
+        mir_lat = sublattice.copy()
+        mir_lat[mir_i, mir_j] = val
+
+        ## 2. Mirror move sequence
+        mir_seq = []
+        for move in seq:
+            move_mir = np.array([-move[0], move[1] - move[0]], dtype=int)
+            mir_seq.append(move_mir)
+
+        return {'lat': mir_lat, 'seq': mir_seq}
+
+    def mirror_state(self, state, plane=0):
+        """
+        Computes the mirror reflection across plane n in {0, 1, 2}:
+          plane=0: sigma_0 (y-axis reflection)
+          plane=1: sigma_1 (rotated by 120 deg) = C3 @ sigma_0
+          plane=2: sigma_2 (rotated by 240 deg) = C3^2 @ sigma_0
+        """
+        # First apply y-mirror
+        mir_state = self.mirror_y_state(state)
+
+        # Apply C3 rotations to access the other two mirror planes
+        for _ in range(plane % 3):
+            mir_state = self.rot_state_120(mir_state)
+
+        return mir_state
+
+    def build_mirror_matrix(self, k, plane=0):
+        """
+        Builds the representation matrix M(k) for reflection symmetry in the 1-hole basis.
+        
+        Parameters:
+        k     : 2D momentum array [k_x, k_y]
+        plane : 0 for sigma_y (y-axis reflection)
+                1 for sigma_1 (rotated by 120 deg)
+                2 for sigma_2 (rotated by 240 deg)
+        """
+        row = []
+        col = []
+        data = []
+
+        # 1. Momentum transformation matrix for plane 0 (sigma_y: x -> -x, y -> y)
+        M_sigma_y = np.array([[-1.0,  0.0],
+                              [ 0.0,  1.0]])
+
+        # Clockwise C3 rotation matrix (-120 deg)
+        theta = -2.0 * np.pi / 3.0
+        C3 = np.array([[np.cos(theta), -np.sin(theta)],
+                       [np.sin(theta),  np.cos(theta)]])
+
+        # Full reflection matrix: sigma_plane = (C3)^plane @ sigma_y
+        M_plane = np.linalg.matrix_power(C3, plane % 3) @ M_sigma_y
+        k_mir = M_plane @ k
+
+        # Base intra-unit-cell vectors for unit_cell=0
+        # Honeycomb: sublattice 0 at (0,0), sublattice 1 at (0,1)
+        delta_hc_0 = np.array([0.0, 1.0])
+        
+        # Triangular 3-site unit cell: sublattice 0 at (0,0), 1 at (0,-1), 2 at (0,1)
+        delta_tri_0 = {
+            1: np.array([0.0, -1.0]),
+            2: np.array([0.0,  1.0])
+        }
+
+        for n, state in enumerate(self.bin_basis):
+            seq = state['seq']
+            x = self.find_hole_sublattice(seq)
+            
+            # Apply mirror reflection across the chosen plane
+            mir_state = self.mirror_state(state, plane=plane)
+            found, m = self.basis.search(self.state_2_list_entry(mir_state))
+            
+            if found:
+                phase_mir = 0.0
+                
+                # Sublattice origin shift phase for Honeycomb 2-site unit cell
+                if self.honeycomb and self.big_unit_cell:
+                    if x == 1:
+                        delta = np.linalg.matrix_power(C3, self.unit_cell % 3) @ delta_hc_0
+                        dist = M_plane @ delta - delta
+                        phase_mir = dist[0] * k_mir[0] + dist[1] * k_mir[1]
+
+                # Sublattice origin shift phase for Triangular 3-site unit cell
+                elif not self.honeycomb and self.big_unit_cell:
+                    if x in (1, 2):
+                        delta = np.linalg.matrix_power(C3, self.unit_cell % 3) @ delta_tri_0[x]
+                        dist = M_plane @ delta - delta
+                        phase_mir = dist[0] * k_mir[0] + dist[1] * k_mir[1]
+
+                row.append(m)
+                col.append(n)
+                data.append(np.exp(-1j * phase_mir))
+            else:
+                print(f"Could not find mirror state for state {n}")
+
+        return csr_matrix((data, (row, col)), shape=(self.basis.length, self.basis.length), dtype=complex)
+
+    def _hopping_phase(self, row, col, k):
+        """Bloch phase of the directed hopping matrix element <row|H_t|col>."""
+        # We zip through the explicitly calculated forward hops from matrix_el
+        for idx, (r, c) in enumerate(zip(self.row_t, self.col_t)):
+            if r == row and c == col:
+                # Forward hop phase
+                return np.exp(1j * (self.data_t[idx, 0] * k[0] + self.data_t[idx, 1] * k[1]))
+            if r == col and c == row:
+                # Backward hop phase (Hermitian conjugate picks up negative phase)
+                return np.exp(-1j * (self.data_t[idx, 0] * k[0] + self.data_t[idx, 1] * k[1]))
+        
+        raise ValueError(f"No hopping matrix element connects basis states {col} and {row}.")
+
+    def rot_trial_state(self, m3, k):
+        '''Computes unnormalized trial state with given rotational C3 eigenvalue m3 and momentum k'''
+        lat = self.Neel_state[0]
+        seq = []
+        state0 = {'lat': lat, 'seq': seq}
+        v = np.zeros((self.basis.length), dtype=complex)
+        
+        # 1. Locate the vacuum (zero-string) state
+        found, zero_index = self.basis.search(self.state_2_list_entry(state0))
+        if not found:
+            raise ValueError("Zero-string state is missing from the basis.")
+            
+        # 2. Build the one-step seed (using the first symmetric step)
+        step = np.array([-1, -1], dtype=int)
+        lat = self.make_step(state0['lat'].copy(), step)
+        state = {'lat': lat, 'seq': [step]}
+        
+        # 3. Apply the true physical C3 orbit exactly as in HC_1_hole_2
+        for n in range(3):
+            a = self.state_2_list_entry(state)
+            found, j = self.basis.search(a)
+            if found:
+                # Ask the Hamiltonian for the EXACT gauge phase for this state
+                hop_phase = self._hopping_phase(j, zero_index, k)
+                
+                # Superimpose with the representation eigenvalue
+                v[j] += hop_phase * np.exp(-1j * m3 * n * 2 * np.pi / 3) / np.sqrt(3)
+                
+            # Physically rotate the string geometry for the next iteration (maps [-1,-1] -> [0,1] -> [1,0])
+            state = self.rot_state_120(state)
+            
+        return v
+
     def rot_trial_state_old(self, m3, k):
         lat = self.Neel_state[0]
         seq = []
@@ -706,37 +870,6 @@ class StringBasis:
             
             if found:
                 v[j] += 1/(np.sqrt(3)) * np.exp(1j * n * (2*np.pi/3 * m3)) * np.exp(-1j * k_phase) 
-        return v
-    
-    def rot_trial_state(self, m3, k):
-        lat = self.Neel_state[0]
-        seq = []
-        state0 = {'lat': lat, 'seq': seq}
-        v = np.zeros((self.basis.length), dtype=complex)
-        lat = np.zeros((self.L_size, self.L_size), dtype=bool)
-        steps = [[-1, -1],[0, 1], [1, 0]] # green hole moves from sl 0 to 1
-        
-        # 1. Determine the gauge momentum phase per rotation
-        k_phase = 0
-        if self.honeycomb and self.big_unit_cell:
-            # Matches the phase from build_rot_matrix for honeycomb odd sublattice
-            k_phase = -1/2 * (k[0] * np.sqrt(3) + k[1] * 3)
-        elif not self.honeycomb and self.big_unit_cell:
-            # Matches the phase from build_rot_matrix for triangular sublattice 1
-            k_phase = -2 * k[0] * np.sqrt(3)
-            
-        for n, step in enumerate(steps):
-            state = copy.deepcopy(state0)
-            lat = self.make_step(state['lat'], step)
-            seq = state['seq'] + [step]
-            state = {'lat': lat, 'seq': seq}
-
-            a = self.state_2_list_entry(state)
-            found, j = self.basis.search(a)
-            
-            if found:
-                # 2. Multiply BOTH m3 and k_phase by n to apply the relative phase shifts
-                v[j] += 1/(np.sqrt(3)) * np.exp(-1j * n * (2*np.pi/3 * m3 - k_phase)) 
         return v
 # -----------------------------------------------------------------------------------
 
