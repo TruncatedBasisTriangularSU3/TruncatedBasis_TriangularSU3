@@ -333,8 +333,8 @@ if calc_overlaps:
                             too_large = True                
 
                         state, state_uncropped = add_holes(n1, n2, jx, jy, lat_sc1, lat_sc2, lat_cc, too_large=too_large)
-                        if type(state)==dict and not too_large:
-                            found, _ = lat_cc.basis.search(lat_cc.state_2_list_entry(state))    
+                        if type(state_uncropped)==dict:  # too_large configs can fit into the cc box after the hop
+                            found = type(state)==dict and lat_cc.basis.search(lat_cc.state_2_list_entry(state))[0]    #discard states that are in the cc basis, since they should be either sc+sc or cc not both
                             if found:
                                 continue
                             
@@ -603,8 +603,8 @@ for p, K_label in enumerate(K_labels):
             Ek_safe = np.where(Ek < 1e-12, 1e-12, Ek)
             thermal = np.tanh(beta * Ek_safe / 2.0) / (2 * Ek_safe)
 
-            target_d0 = g/V * np.sum(gap_total * np.conjugate(gamma_0) / (2 * Ek) * thermal)
-            target_d1 = g/V * np.sum(gap_total * np.conjugate(gamma_1) / (2 * Ek) * thermal)
+            target_d0 = g/V * np.sum(gap_total * np.conjugate(gamma_0) * thermal)  # thermal already contains 1/(2E)
+            target_d1 = g/V * np.sum(gap_total * np.conjugate(gamma_1) * thermal)
             
             # We want d0 - target_d0 = 0 and d1 - target_d1 = 0
             res_d0 = d0 - target_d0
