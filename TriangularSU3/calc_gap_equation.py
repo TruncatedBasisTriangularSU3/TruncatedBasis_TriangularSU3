@@ -49,7 +49,8 @@ unit_cell = 1
 # gap parameters
 beta = 10**6
 doping = 0.05 # doping (has to be between 0 and 1)
-delta_E = -0.1 #should be negative and not smaller then the sc bandwidth 
+delta_E = -0.1 #should be negative and not smaller then the sc bandwidth
+chiral_start = True # at Gamma also start the gap equation from a chiral guess (only C3 basis); all solutions are compared by Omega
 
 # Define the 3 target momentum points instead of just 1
 k_ccs = [
@@ -143,6 +144,7 @@ if calc_overlaps:
             # Loop over Gamma, K, K', M to get the sc2 state for each relative momentum k2s[p]
             for p in range(len(K_labels)):
                 lat_sc2.compute_H(k2s[p][:, x], j=j, t=t,t2=t2, j_perp=j_perp)
+                lat_sc2.H = lat_sc2.H.astype(np.complex128)  # see sc1
                 if lat_sc2.basis.length <= 3:
                     Es, vs = np.linalg.eigh(lat_sc2.H)
                 else:
@@ -621,8 +623,31 @@ for p, K_label in enumerate(K_labels):
         # guess = [0.1, 0.1, 0.01] 
         guess = [initial_guess[0].real,initial_guess[1].real, initial_guess[1].imag]
         sol, info, ier, msg = fsolve(residuals, guess, full_output=True)
-        
+        if ier != 1:
+            print(f'gap equation not converged from initial guess {initial_guess}: {msg}')
+
         return sol[0], sol[1] + 1j*sol[2]
+
+    def free_energy(eps_k, gamma_0, gamma_1, g, beta, d0, d1):
+        # Omega(Delta) - Omega(0) per k-point. The solutions of solve_coupled_gaps are its stationary points,
+        # the one with the lowest Omega is the mean-field ground state
+        def omega_qp(Ek):
+            return np.sum(eps_k - Ek - 2/beta * np.logaddexp(0, -beta * Ek))
+        Ek = np.sqrt(eps_k**2 + np.abs(d0 * gamma_0 + d1 * gamma_1)**2)
+        return (V/g * (abs(d0)**2 + abs(d1)**2) + omega_qp(Ek) - omega_qp(np.abs(eps_k))) / len(eps_k)
+
+    def classify_solution(d0, d1, rtol=1e-3):
+        # in the C3 basis gamma0/gamma1 belong to the two C3 eigenvalues of the cc doublet: chiral = one component, nematic = equal moduli
+        a0, a1 = abs(d0), abs(d1)
+        if max(a0, a1) < 1e-8:
+            return 'normal'
+        if symmetry != "C3":
+            return 'not classified (mirror basis)'
+        if min(a0, a1) < rtol * max(a0, a1):
+            return 'chiral'
+        if abs(a0 - a1) < rtol * max(a0, a1):
+            return f'nematic, phi = {np.degrees(np.angle(d1/d0)):.1f} deg'
+        return f'mixed, |d1/d0| = {a1/a0:.4f}, phi = {np.degrees(np.angle(d1/d0)):.1f} deg'
 
     delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(1, 1))
     np.save(f'../results/TRI/Delta_k/delta_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}_kcc={K_label}.npy', (delta1, delta2))
@@ -632,39 +657,54 @@ for p, K_label in enumerate(K_labels):
     if k_ccs[p][0] == 0 and k_ccs[p][1] == 0:
         Delta = np.abs(delta1)
         phase_degrees = [0, 60, 120, 180, 240, 300]
-        
-        fig, axs = plt.subplots(3, 4, figsize=(20, 15))
+        starts = [(fr'$\phi={deg}^\circ$', (Delta*1, Delta*np.exp(1j*i*np.pi/3))) for i, deg in enumerate(phase_degrees)]
+        if chiral_start and symmetry == "C3":
+            starts.append(('chiral', (Delta*1, 0)))
+
+        n_rows = int(np.ceil(len(starts)/2))
+        fig, axs = plt.subplots(n_rows, 4, figsize=(20, 5*n_rows))
         axs_flat = axs.flatten()
 
-        for i, deg in enumerate(phase_degrees):
-            delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(Delta*1, Delta*np.exp(1j*i*np.pi/3)))
+        Omegas = []
+        kinds = []
+        for i, (start_label, guess) in enumerate(starts):
+            delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=guess)
             current_Delta_k = delta1 * gamma0 + delta2 * gamma1
-            print(f'initial guess: {Delta*1}, {Delta*np.exp(1j*i*np.pi/3)}')
-            print(f' Delta1: {delta1}, Delta2: {delta2} for angle {deg}°')
+            Omega = free_energy(epsilon, gamma0, gamma1, g, beta, delta1, delta2)
+            Omegas.append(Omega)
+            kinds.append(classify_solution(delta1, delta2))
+            print(f'initial guess: {guess[0]}, {guess[1]}')
+            print(f' Delta1: {delta1}, Delta2: {delta2} for start {start_label}: {kinds[-1]}, Omega = {Omega:.6e}')
             print()
             # Grid indexing
             idx_real = i * 2
             idx_imag = i * 2 + 1
-            
+
             # --- Plot Real Part (using coolwarm) ---
-            im_abs = axs_flat[idx_real].tripcolor(triang, np.abs(current_Delta_k), 
+            im_abs = axs_flat[idx_real].tripcolor(triang, np.abs(current_Delta_k),
                                                 shading='gouraud', cmap='coolwarm')
-            axs_flat[idx_real].set_title(fr'$|\Delta_k|$ for $\phi={deg}^\circ$')
+            axs_flat[idx_real].set_title(fr'$|\Delta_k|$ for {start_label}' + '\n' + fr'$\Omega={Omega:.4e}$')
             fig.colorbar(im_abs, ax=axs_flat[idx_real])
-            
+
             # --- Plot Imaginary Part (using twilight) ---
-            im_angle = axs_flat[idx_imag].tripcolor(triang, np.angle(current_Delta_k), 
+            im_angle = axs_flat[idx_imag].tripcolor(triang, np.angle(current_Delta_k),
                                                 shading='gouraud', cmap='twilight')
-            axs_flat[idx_imag].set_title(fr'$\angle \Delta_k$ for $\phi={deg}^\circ$')
+            axs_flat[idx_imag].set_title(fr'$\angle \Delta_k$ for {start_label}')
             fig.colorbar(im_angle, ax=axs_flat[idx_imag])
+
+        best = int(np.argmin(Omegas))
+        print(f'lowest Omega (mean-field ground state): {kinds[best]} (start {starts[best][0]}), Omega = {Omegas[best]:.6e}')
+        print()
 
         # 3. Clean up axes
         for idx, ax in enumerate(axs_flat):
             ax.set_xlabel(r'$k_x$')
             if idx % 2 == 0:
                 ax.set_ylabel(r'$k_y$')
+        for ax in axs_flat[2*len(starts):]:
+            ax.axis('off')
 
-        plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $doping={doping}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
+        plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $doping={doping}$, $\Delta E={delta_E}$, $t2={t2}$, lowest $\Omega$: ' + kinds[best], fontsize=22)
         plt.tight_layout()
 
         plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_allsolutions_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
