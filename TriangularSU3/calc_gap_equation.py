@@ -49,7 +49,7 @@ unit_cell = 1
 beta = 10**6
 doping = 0.05 # doping (has to be between 0 and 1)
 delta_E = -0.1 #should be negative and not smaller then the sc bandwidth
-chiral_start = False # at Gamma also start the gap equation from a chiral guess (only C3 basis); all solutions are compared by Omega
+chiral_start = True # at Gamma also start the gap equation from a chiral guess (only C3 basis); all solutions are compared by Omega
 
 # Define the 3 target momentum points instead of just 1
 k_ccs = [
@@ -668,14 +668,12 @@ for p, K_label in enumerate(K_labels):
 
         Omegas = []
         kinds = []
-        deltas = []
         for i, (start_label, guess) in enumerate(starts):
             delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=guess)
             current_Delta_k = delta1 * gamma0 + delta2 * gamma1
             Omega = free_energy(epsilon, gamma0, gamma1, g, beta, delta1, delta2)
             Omegas.append(Omega)
             kinds.append(classify_solution(delta1, delta2))
-            deltas.append((delta1, delta2))
             print(f'initial guess: {guess[0]}, {guess[1]}')
             print(f' Delta1: {delta1}, Delta2: {delta2} for start {start_label}: {kinds[-1]}, Omega = {Omega:.6e}')
             print()
@@ -696,7 +694,7 @@ for p, K_label in enumerate(K_labels):
             fig.colorbar(im_angle, ax=axs_flat[idx_imag])
 
         best = int(np.argmin(Omegas))
-        print(f'lowest Omega (mean-field ground state): {kinds[best]} (start {starts[best][0]}), Omega = {Omegas[best]:.6e}, (delta1,delta2) = {deltas[best]}')
+        print(f'lowest Omega (mean-field ground state): {kinds[best]} (start {starts[best][0]}), Omega = {Omegas[best]:.6e}')
         print()
 
         # 3. Clean up axes
