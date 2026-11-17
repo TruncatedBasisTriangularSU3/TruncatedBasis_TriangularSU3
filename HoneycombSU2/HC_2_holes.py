@@ -379,8 +379,10 @@ class StringBasis:
                             phase = (hole_pos[1] - self.depth - 1)
                             if sl[0]!=sl[1]:
                                 phase[0] += 2*(sl[0]-0.5)
-                            self.data_j_perp.append((1,-1*phase, sl))
+                            # (row j, col i) gets +phase, as in the H_t term; the
+                            # opposite sign broke C6 symmetry from depth 11 on
                             self.data_j_perp.append((1,phase.copy(), sl))
+                            self.data_j_perp.append((1,-1*phase, sl))
 
                     # restore the two sites flipped above (site[0],site[1]+1), not (site[0]+1,site[1])
                     lat1[site[0],site[1]]=True
@@ -406,8 +408,9 @@ class StringBasis:
                                 phase = (hole_pos[1] - self.depth - 1)
                                 if sl[0]!=sl[1]:
                                     phase[0] += 2*(sl[0]-0.5)
+                                # (row j, col i) gets +phase, as in the H_t term
+                                self.data_j_perp.append((1,phase.copy(), sl))
                                 self.data_j_perp.append((1,-1*phase, sl))
-                                self.data_j_perp.append((1,phase, sl))
 
             ##### compute H_{t}(k) part: #hole 1 hops
             steps = [np.array([1,0,1]), np.array([1,0,-1]), np.array([1,1,0])]
