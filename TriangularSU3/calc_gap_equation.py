@@ -24,13 +24,12 @@ from TriangularSU3 import SU3_helper_sc_cc_overlaps
 reload(SU3_helper_sc_cc_overlaps)  
 from TriangularSU3.SU3_helper_sc_cc_overlaps import *
 
-plot_gaps = False
 calc_overlaps = True  # choose whether to calculate the overlaps or just load them from file
-honeycomb = True
+honeycomb = True  # choose whether to use the honeycomb or triangular lattice
 cc_rot_basis = True   # choose in which basis degenerate states are diagonalized  !!! For Mirror basis, the gaps are not plottet correctly !!!
 symmetry = "C3" if cc_rot_basis else "sigma"  
 system = 'SU2Hc' if honeycomb else 'SU3Tri'
-L=71
+L=101
 Ly = L
 Lx = L
 j = 0.3
@@ -40,9 +39,9 @@ connected = True
 t2=0   # t' in the sc and cc Hamiltonians (dispersions, eigenstates)
 t2_overlaps = 0.1   # t' in the scattering elements M only
 
-depth_sc = 4
-depth_cc = 4
-l_max_sc_overlaps = 3
+depth_sc = 7
+depth_cc = 7
+l_max_sc_overlaps = 6
 
 unit_cell = 1
 
@@ -50,7 +49,7 @@ unit_cell = 1
 beta = 10**6
 doping = 0.05 # doping (has to be between 0 and 1)
 delta_E = -0.1 #should be negative and not smaller then the sc bandwidth
-chiral_start = True # at Gamma also start the gap equation from a chiral guess (only C3 basis); all solutions are compared by Omega
+chiral_start = False # at Gamma also start the gap equation from a chiral guess (only C3 basis); all solutions are compared by Omega
 
 # Define the 3 target momentum points instead of just 1
 k_ccs = [
@@ -227,7 +226,7 @@ if calc_overlaps:
             # For "C3": sort by phase angle of C3 eigenvalue (e^{+i 2pi/3} vs e^{-i 2pi/3})
             if symmetry == "sigma":
                 sort_idx = np.argsort(-np.real(cs))
-            else:
+            elif symmetry == "C3":
                 sort_idx = np.argsort(np.angle(cs))
             cs = cs[sort_idx]
             states = states[:, sort_idx]
@@ -283,8 +282,9 @@ if calc_overlaps:
     with tqdm(total=total_iterations) as pbar:
         for n1 in lat_sc1.indices1:
             for n2 in lat_sc2.indices2: 
-                if len(lat_sc1.bin_basis[n1]['seq']) != 0 and len(lat_sc2.bin_basis[n2]['seq']) != 0:
-                    continue
+                if honeycomb:
+                    if len(lat_sc1.bin_basis[n1]['seq']) != 0 and len(lat_sc2.bin_basis[n2]['seq']) != 0: #only accurate for honeycomb
+                        continue
                 j_max = min(lat_sc1.depth+3,lat_cc.depth+2)
                 j_min = -j_max
                 x = lat_sc1.find_hole_sublattice(lat_sc1.bin_basis[n1]['seq'])
@@ -650,176 +650,180 @@ for p, K_label in enumerate(K_labels):
         return f'mixed, |d1/d0| = {a1/a0:.4f}, phi = {np.degrees(np.angle(d1/d0)):.1f} deg'
 
     delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(1, 1))
+    print(delta)
     np.save(f'../results/TRI/Delta_k/delta_L={L}_{system}_ccdepth_{depth_cc}_scdepth{depth_sc}_lmaxov_{l_max_sc_overlaps}_j{j}_jperp{j_perp}_t{t}_kcc={K_label}.npy', (delta1, delta2))
-    if plot_gaps:
-        print('plotting all solutions for given parameters')
 
-        if k_ccs[p][0] == 0 and k_ccs[p][1] == 0:
-            Delta = np.abs(delta1)
-            phase_degrees = [0, 60, 120, 180, 240, 300]
-            starts = [(fr'$\phi={deg}^\circ$', (Delta*1, Delta*np.exp(1j*i*np.pi/3))) for i, deg in enumerate(phase_degrees)]
-            if chiral_start and symmetry == "C3":
-                starts.append(('chiral', (Delta*1, 0)))
+    print('plotting all solutions for given parameters')
 
-            n_rows = int(np.ceil(len(starts)/2))
-            fig, axs = plt.subplots(n_rows, 4, figsize=(20, 5*n_rows))
-            axs_flat = axs.flatten()
+    if k_ccs[p][0] == 0 and k_ccs[p][1] == 0:
+        Delta = np.abs(delta1)
+        phase_degrees = [0, 60, 120, 180, 240, 300]
+        starts = [(fr'$\phi={deg}^\circ$', (Delta*1, Delta*np.exp(1j*i*np.pi/3))) for i, deg in enumerate(phase_degrees)]
+        if chiral_start and symmetry == "C3":
+            starts.append(('chiral', (Delta*1, 0)))
 
-            Omegas = []
-            kinds = []
-            for i, (start_label, guess) in enumerate(starts):
-                delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=guess)
-                current_Delta_k = delta1 * gamma0 + delta2 * gamma1
-                Omega = free_energy(epsilon, gamma0, gamma1, g, beta, delta1, delta2)
-                Omegas.append(Omega)
-                kinds.append(classify_solution(delta1, delta2))
-                print(f'initial guess: {guess[0]}, {guess[1]}')
-                print(f' Delta1: {delta1}, Delta2: {delta2} for start {start_label}: {kinds[-1]}, Omega = {Omega:.6e}')
-                print()
-                # Grid indexing
-                idx_real = i * 2
-                idx_imag = i * 2 + 1
+        n_rows = int(np.ceil(len(starts)/2))
+        fig, axs = plt.subplots(n_rows, 4, figsize=(20, 5*n_rows))
+        axs_flat = axs.flatten()
 
-                # --- Plot Real Part (using coolwarm) ---
-                im_abs = axs_flat[idx_real].tripcolor(triang, np.abs(current_Delta_k),
-                                                    shading='gouraud', cmap='coolwarm')
-                axs_flat[idx_real].set_title(fr'$|\Delta_k|$ for {start_label}' + '\n' + fr'$\Omega={Omega:.4e}$')
-                fig.colorbar(im_abs, ax=axs_flat[idx_real])
-
-                # --- Plot Imaginary Part (using twilight) ---
-                im_angle = axs_flat[idx_imag].tripcolor(triang, np.angle(current_Delta_k),
-                                                    shading='gouraud', cmap='twilight')
-                axs_flat[idx_imag].set_title(fr'$\angle \Delta_k$ for {start_label}')
-                fig.colorbar(im_angle, ax=axs_flat[idx_imag])
-
-            best = int(np.argmin(Omegas))
-            print(f'lowest Omega (mean-field ground state): {kinds[best]} (start {starts[best][0]}), Omega = {Omegas[best]:.6e}')
+        Omegas = []
+        kinds = []
+        deltas = []
+        for i, (start_label, guess) in enumerate(starts):
+            delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=guess)
+            current_Delta_k = delta1 * gamma0 + delta2 * gamma1
+            Omega = free_energy(epsilon, gamma0, gamma1, g, beta, delta1, delta2)
+            Omegas.append(Omega)
+            kinds.append(classify_solution(delta1, delta2))
+            deltas.append((delta1, delta2))
+            print(f'initial guess: {guess[0]}, {guess[1]}')
+            print(f' Delta1: {delta1}, Delta2: {delta2} for start {start_label}: {kinds[-1]}, Omega = {Omega:.6e}')
             print()
+            # Grid indexing
+            idx_real = i * 2
+            idx_imag = i * 2 + 1
 
-            # 3. Clean up axes
-            for idx, ax in enumerate(axs_flat):
-                ax.set_xlabel(r'$k_x$')
-                if idx % 2 == 0:
-                    ax.set_ylabel(r'$k_y$')
-            for ax in axs_flat[2*len(starts):]:
-                ax.axis('off')
+            # --- Plot Real Part (using coolwarm) ---
+            im_abs = axs_flat[idx_real].tripcolor(triang, np.abs(current_Delta_k),
+                                                shading='gouraud', cmap='coolwarm')
+            axs_flat[idx_real].set_title(fr'$|\Delta_k|$ for {start_label}' + '\n' + fr'$\Omega={Omega:.4e}$')
+            fig.colorbar(im_abs, ax=axs_flat[idx_real])
 
-            plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $doping={doping}$, $\Delta E={delta_E}$, $t2={t2}$, lowest $\Omega$: ' + kinds[best], fontsize=22)
-            plt.tight_layout()
+            # --- Plot Imaginary Part (using twilight) ---
+            im_angle = axs_flat[idx_imag].tripcolor(triang, np.angle(current_Delta_k),
+                                                shading='gouraud', cmap='twilight')
+            axs_flat[idx_imag].set_title(fr'$\angle \Delta_k$ for {start_label}')
+            fig.colorbar(im_angle, ax=axs_flat[idx_imag])
 
-            plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_allsolutions_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+        best = int(np.argmin(Omegas))
+        print(f'lowest Omega (mean-field ground state): {kinds[best]} (start {starts[best][0]}), Omega = {Omegas[best]:.6e}, (delta1,delta2) = {deltas[best]}')
+        print()
 
-            fig, axs = plt.subplots(3, 2, figsize=(15, 20))
-            axs_flat = axs.flatten()
-            phase_degrees = [0, 120, 240]
+        # 3. Clean up axes
+        for idx, ax in enumerate(axs_flat):
+            ax.set_xlabel(r'$k_x$')
+            if idx % 2 == 0:
+                ax.set_ylabel(r'$k_y$')
+        for ax in axs_flat[2*len(starts):]:
+            ax.axis('off')
 
-            for i, deg in enumerate(phase_degrees):
-                delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(Delta*1, Delta*np.exp(1j*2*i*np.pi/3)))
-                print(f'initial guess: {Delta*1}, {Delta*np.exp(1j*2*i*np.pi/3)}')
-                print(f' Delta1: {delta1}, Delta2: {delta2} for angle {deg}°')
-                print()
-                current_Delta_k = delta1 * gamma0 + delta2 * gamma1
-                # Grid indexing
-                idx_real = i * 2
-                idx_imag = i * 2 + 1
-                
-                # --- Plot Real Part (using coolwarm) ---
-                im_abs = axs_flat[idx_real].tripcolor(triang, np.abs(current_Delta_k), 
-                                                    shading='gouraud', cmap='coolwarm')
-                axs_flat[idx_real].set_title(fr'$|\Delta_k|$ for $\phi={deg}^\circ$')
-                fig.colorbar(im_abs, ax=axs_flat[idx_real])
-                
-                # --- Plot Imaginary Part (using twilight) ---
-                im_angle = axs_flat[idx_imag].tripcolor(triang, np.angle(current_Delta_k), 
-                                                    shading='gouraud', cmap='twilight')
-                axs_flat[idx_imag].set_title(fr'$\angle \Delta_k$ for $\phi={deg}^\circ$')
-                fig.colorbar(im_angle, ax=axs_flat[idx_imag])
+        plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $doping={doping}$, $\Delta E={delta_E}$, $t2={t2}$, lowest $\Omega$: ' + kinds[best], fontsize=22)
+        plt.tight_layout()
 
-            # 3. Clean up axes
-            for idx, ax in enumerate(axs_flat):
-                ax.set_xlabel(r'$k_x$')
-                if idx % 2 == 0:
-                    ax.set_ylabel(r'$k_y$')
+        plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_allsolutions_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 
-            plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $doping={doping}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
-            plt.tight_layout()
+        fig, axs = plt.subplots(3, 2, figsize=(15, 20))
+        axs_flat = axs.flatten()
+        phase_degrees = [0, 120, 240]
 
-            # 4. Save and Show
-            plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_abs+angle_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
-
-            ## --- Plot only absolute values of 3 solutions (0, 120, 240 degrees) ---
-            fig, axs = plt.subplots(1, 3, figsize=(16, 5))
-            phase_degrees = [0, 120, 240]
-
-            TITLE_SIZE = 28
-            LABEL_SIZE = 26
-            TICK_SIZE = 24
-
-        # Determine the leftmost and rightmost bounds of your mesh
-            x_min, x_max = triang.x.min(), triang.x.max()
-
-            for i, deg in enumerate(phase_degrees):
-                delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(Delta*1, Delta*np.exp(1j*2*i*np.pi/3)))
-                current_Delta_k = delta1 * gamma0 + delta2 * gamma1
-                
-                # Added vmin=0 to force the colormap and colorbar to start at 0.0
-                im_abs = axs[i].tripcolor(triang, np.abs(current_Delta_k), 
-                                        shading='gouraud', cmap='coolwarm', vmin=0)
-                axs[i].set_aspect('equal')
-                axs[i].set_xlim(x_min, x_max)
-
-                axs[i].xaxis.set_major_locator(MultipleLocator(2))
-                axs[i].yaxis.set_major_locator(MultipleLocator(2))
-                axs[i].tick_params(axis='both', which='major', labelsize=TICK_SIZE)
-
-            # Attach and configure colorbar
-            divider = make_axes_locatable(axs[2])
-            cax = divider.append_axes("right", size="5%", pad=0.1)
-            cbar = fig.colorbar(im_abs, cax=cax)
+        for i, deg in enumerate(phase_degrees):
+            delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(Delta*1, Delta*np.exp(1j*2*i*np.pi/3)))
+            print(f'initial guess: {Delta*1}, {Delta*np.exp(1j*2*i*np.pi/3)}')
+            print(f' Delta1: {delta1}, Delta2: {delta2} for angle {deg}°')
+            print()
+            current_Delta_k = delta1 * gamma0 + delta2 * gamma1
+            # Grid indexing
+            idx_real = i * 2
+            idx_imag = i * 2 + 1
             
-            cbar.set_label(r"$|\Delta_k|$", fontsize=LABEL_SIZE)
-            cbar.ax.tick_params(labelsize=TICK_SIZE)
-            cbar.ax.yaxis.set_major_locator(MultipleLocator(0.1))
-
-            axs[0].set_ylabel(r'$k_y$', fontsize=LABEL_SIZE)
-            axs[1].tick_params(labelleft=False)
-            axs[2].tick_params(labelleft=False)
-            for ax in axs:
-                ax.set_xlabel(r'$k_x$', fontsize=LABEL_SIZE)
-
-            # Replaced plt.suptitle with axs[1].set_title to match the else block's padding perfectly
-            axs[1].set_title(fr'$Q=\Gamma$', fontsize=TITLE_SIZE)
+            # --- Plot Real Part (using coolwarm) ---
+            im_abs = axs_flat[idx_real].tripcolor(triang, np.abs(current_Delta_k), 
+                                                shading='gouraud', cmap='coolwarm')
+            axs_flat[idx_real].set_title(fr'$|\Delta_k|$ for $\phi={deg}^\circ$')
+            fig.colorbar(im_abs, ax=axs_flat[idx_real])
             
-            plt.tight_layout()
+            # --- Plot Imaginary Part (using twilight) ---
+            im_angle = axs_flat[idx_imag].tripcolor(triang, np.angle(current_Delta_k), 
+                                                shading='gouraud', cmap='twilight')
+            axs_flat[idx_imag].set_title(fr'$\angle \Delta_k$ for $\phi={deg}^\circ$')
+            fig.colorbar(im_angle, ax=axs_flat[idx_imag])
 
-            # 4. Save and Show
-            plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_abs_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+        # 3. Clean up axes
+        for idx, ax in enumerate(axs_flat):
+            ax.set_xlabel(r'$k_x$')
+            if idx % 2 == 0:
+                ax.set_ylabel(r'$k_y$')
 
-        else:
-            Delta_k = delta1 * gamma0 + delta2 * gamma1
-            fig, ax = plt.subplots(figsize=(5, 5))
-            x_min, x_max = triang.x.min(), triang.x.max()
+        plt.suptitle(fr'$\Delta_k$ for $Q=\Gamma$, $doping={doping}$, $\Delta E={delta_E}$, $t2={t2}$', fontsize=22)
+        plt.tight_layout()
 
-            # Added vmin=0 here as well
-            im_abs = ax.tripcolor(triang, np.abs(Delta_k), 
-                                shading='gouraud', cmap='coolwarm', vmin=0)
+        # 4. Save and Show
+        plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_abs+angle_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+
+        ## --- Plot only absolute values of 3 solutions (0, 120, 240 degrees) ---
+        fig, axs = plt.subplots(1, 3, figsize=(16, 5))
+        phase_degrees = [0, 120, 240]
+
+        TITLE_SIZE = 28
+        LABEL_SIZE = 26
+        TICK_SIZE = 24
+
+       # Determine the leftmost and rightmost bounds of your mesh
+        x_min, x_max = triang.x.min(), triang.x.max()
+
+        for i, deg in enumerate(phase_degrees):
+            delta1, delta2 = solve_coupled_gaps(epsilon, gamma0, gamma1, g, beta, initial_guess=(Delta*1, Delta*np.exp(1j*2*i*np.pi/3)))
+            current_Delta_k = delta1 * gamma0 + delta2 * gamma1
             
-            ax.set_title(fr'$Q={K_label}$', fontsize=TITLE_SIZE)
-            ax.set_aspect('equal')
-            ax.set_xlim(x_min, x_max)
-            
+            # Added vmin=0 to force the colormap and colorbar to start at 0.0
+            im_abs = axs[i].tripcolor(triang, np.abs(current_Delta_k), 
+                                      shading='gouraud', cmap='coolwarm', vmin=0)
+            axs[i].set_aspect('equal')
+            axs[i].set_xlim(x_min, x_max)
+
+            axs[i].xaxis.set_major_locator(MultipleLocator(2))
+            axs[i].yaxis.set_major_locator(MultipleLocator(2))
+            axs[i].tick_params(axis='both', which='major', labelsize=TICK_SIZE)
+
+        # Attach and configure colorbar
+        divider = make_axes_locatable(axs[2])
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cbar = fig.colorbar(im_abs, cax=cax)
+        
+        cbar.set_label(r"$|\Delta_k|$", fontsize=LABEL_SIZE)
+        cbar.ax.tick_params(labelsize=TICK_SIZE)
+        cbar.ax.yaxis.set_major_locator(MultipleLocator(0.1))
+
+        axs[0].set_ylabel(r'$k_y$', fontsize=LABEL_SIZE)
+        axs[1].tick_params(labelleft=False)
+        axs[2].tick_params(labelleft=False)
+        for ax in axs:
             ax.set_xlabel(r'$k_x$', fontsize=LABEL_SIZE)
-            ax.set_ylabel(r'$k_y$', fontsize=LABEL_SIZE)
-            ax.xaxis.set_major_locator(MultipleLocator(2))
-            ax.yaxis.set_major_locator(MultipleLocator(2))
-            ax.tick_params(axis='both', which='major', labelsize=TICK_SIZE)
 
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="5%", pad=0.1)
-            cbar = fig.colorbar(im_abs, cax=cax)
-            cbar.set_label(r"$|\Delta_k|$", fontsize=LABEL_SIZE)
-            cbar.ax.tick_params(labelsize=TICK_SIZE)
-            cbar.ax.yaxis.set_major_locator(MultipleLocator(0.1))
+        # Replaced plt.suptitle with axs[1].set_title to match the else block's padding perfectly
+        axs[1].set_title(fr'$Q=\Gamma$', fontsize=TITLE_SIZE)
+        
+        plt.tight_layout()
 
-        plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+        # 4. Save and Show
+        plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_abs_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
+
+    else:
+        Delta_k = delta1 * gamma0 + delta2 * gamma1
+        fig, ax = plt.subplots(figsize=(5, 5))
+        x_min, x_max = triang.x.min(), triang.x.max()
+
+        # Added vmin=0 here as well
+        im_abs = ax.tripcolor(triang, np.abs(Delta_k), 
+                              shading='gouraud', cmap='coolwarm', vmin=0)
+        
+        ax.set_title(fr'$Q={K_label}$', fontsize=TITLE_SIZE)
+        ax.set_aspect('equal')
+        ax.set_xlim(x_min, x_max)
+        
+        ax.set_xlabel(r'$k_x$', fontsize=LABEL_SIZE)
+        ax.set_ylabel(r'$k_y$', fontsize=LABEL_SIZE)
+        ax.xaxis.set_major_locator(MultipleLocator(2))
+        ax.yaxis.set_major_locator(MultipleLocator(2))
+        ax.tick_params(axis='both', which='major', labelsize=TICK_SIZE)
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cbar = fig.colorbar(im_abs, cax=cax)
+        cbar.set_label(r"$|\Delta_k|$", fontsize=LABEL_SIZE)
+        cbar.ax.tick_params(labelsize=TICK_SIZE)
+        cbar.ax.yaxis.set_major_locator(MultipleLocator(0.1))
+
+    plt.savefig(f'../results/figures/Delta_k/{system}_kcc={K_label}_DeltaE{delta_E}_cp{doping}_beta{beta}_t2={t2}_lsc={depth_sc}_lcc={depth_cc}_lscmax={l_max_sc_overlaps}_L={L}.pdf')
 print('------------- finished plotting -------------')
+

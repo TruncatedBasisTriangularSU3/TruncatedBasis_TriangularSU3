@@ -85,7 +85,7 @@ class StringBasis:
             self.big_unit_cell = False
         elif isinstance(unit_cell, int):
             self.big_unit_cell = True
-        print(f'1hole big_unit_cell={self.big_unit_cell}, unit_cell={unit_cell}')
+        # print(f'1hole big_unit_cell={self.big_unit_cell}, unit_cell={unit_cell}')
 
         self.tol = 0
 
@@ -312,7 +312,7 @@ class StringBasis:
                 uc = 'three site uc'
             else:
                 uc = 'one site uc'
-        print(f'generate 1hole basis for {lattice} lattice with {uc}')
+        # print(f'generate 1hole basis for {lattice} lattice with {uc}')
         if self.basis.length > 0:
             print('Basis has already been built')
         else:
